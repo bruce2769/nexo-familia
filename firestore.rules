@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper: usuario autenticado ──────────────────────────
+    function isAuth() {
+      return request.auth != null;
+    }
+
+    // ── Usuarios ─────────────────────────────────────────────
+    // Solo el propio usuario puede leer/escribir su perfil
+    match /usuarios/{uid} {
+      allow read, write: if isAuth() && request.auth.uid == uid;
+    }
+
+    // ── Diagnósticos ─────────────────────────────────────────
+    // Lectura y escritura solo si userId == uid del token
+    match /diagnosticos/{docId} {
+      allow read, update, delete: if isAuth()
+        && request.auth.uid == resource.data.userId;
+      allow create: if isAuth()
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // ── Radar (causas suscritas) ──────────────────────────────
+    match /radar_causas/{docId} {
+      allow read, update, delete: if isAuth()
+        && request.auth.uid == resource.data.userId;
+      allow create: if isAuth()
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // ── RadarEventos (alertas + movimientos tiempo real) ─────
+    match /radarEventos/{userId}/{document=**} {
+      allow read, write: if isAuth() && request.auth.uid == userId;
+    }
+
+    // ── Estado (causas locales del usuario) ──────────────────
+    match /causas_usuario/{docId} {
+      allow read, update, delete: if isAuth()
+        && request.auth.uid == resource.data.userId;
+      allow create: if isAuth()
+        && request.auth.uid == request.resource.data.userId;
+    }
+
+    // ── Muro comunitario ─────────────────────────────────────
+    // Cualquier usuario autenticado puede leer posts
+    // Solo el autor puede eliminar/editar el suyo
+    match /muro/{postId} {
+      allow read: if isAuth();
+      allow create: if isAuth()
+        && request.auth.uid == request.resource.data.autorUid;
+      allow update, delete: if isAuth()
+        && request.auth.uid == resource.data.autorUid;
+    }
+
+    // Sub-colección de replies del muro
+    match /muro/{postId}/replies/{replyId} {
+      allow read: if isAuth();
+      allow create: if isAuth()
+        && request.auth.uid == request.resource.data.autorUid;
+      allow update, delete: if isAuth()
+        && request.auth.uid == resource.data.autorUid;
+    }
+
+    // ── Bloquear todo lo demás por defecto ───────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+  }
+}

@@ -1,0 +1,26 @@
+{
+    "name": "nexo-backend",
+    "version": "1.0.0",
+    "description": "Backend para Nexo Familia - Scraper del Poder Judicial de Chile",
+    "main": "src/server.js",
+    "scripts": {
+        "start": "node src/server.js",
+        "dev": "nodemon src/server.js",
+        "test:scraper": "node src/scraper/testRun.js",
+        "test:api": "node src/scraper/testApi.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "playwright": "^1.40.1",
+        "node-cron": "^3.0.3",
+        "firebase-admin": "^11.11.1",
+        "axios": "^1.6.2",
+        "cors": "^2.8.5",
+        "dotenv": "^16.3.1",
+        "winston": "^3.11.0",
+        "node-fetch": "^2.7.0"
+    },
+    "devDependencies": {
+        "nodemon": "^3.0.2"
+    }
+}

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import './nexo.css';
-import Navbar from './components/Navbar.jsx';
-import Footer from './components/Footer.jsx';
+// import Navbar from './components/Navbar.jsx';
+// import Footer from './components/Footer.jsx';
+import Sidebar from './components/Sidebar.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
 import CausaModule from './modules/CausaModule.jsx';
 import RiesgoModule from './modules/RiesgoModule.jsx';
@@ -93,12 +94,14 @@ function NexoAppContent() {
     ];
 
     return (
-        <div className="nf-app">
-            <Navbar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
-            <main className="nf-main" key={activeTab}>
-                {renderModule()}
-            </main>
-            <Footer />
+        <div className="nf-app-layout">
+            <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
+            
+            <div className="nf-content-wrapper">
+                <main className="nf-main" key={activeTab}>
+                    {renderModule()}
+                </main>
+            </div>
 
             {/* Onboarding Modal */}
             {showOnboarding && (

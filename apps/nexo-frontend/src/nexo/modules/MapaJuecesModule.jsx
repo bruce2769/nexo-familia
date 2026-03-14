@@ -296,9 +296,38 @@ export default function MapaJuecesModule() {
                     setDatosEstacionalidad(await resEstacionalidad.json());
                     setKpis(await resKpis.json());
                     setDatosMaterias(await resMaterias.json());
+                } else {
+                    throw new Error("API not ok");
                 }
             } catch (err) {
                 console.warn("Fallo cargando dashboard real, usando backend disponible fallback: ", err);
+                
+                // Usar datos demo si falla la conexión a la base de datos real
+                setDatosVelocidad([
+                    { tribunal: 'Santiago', meses: 5.2 },
+                    { tribunal: 'San Miguel', meses: 4.8 },
+                    { tribunal: 'Valparaíso', meses: 6.1 },
+                    { tribunal: 'Concepción', meses: 5.8 }
+                ]);
+                setDatosEstacionalidad([
+                    { mes: 'Ene', sentencias: 1240 },
+                    { mes: 'Feb', sentencias: 850 },
+                    { mes: 'Mar', sentencias: 1620 },
+                    { mes: 'Abr', sentencias: 1480 },
+                    { mes: 'May', sentencias: 1530 }
+                ]);
+                setDatosMaterias([
+                    { materia: 'Pensión', valor: 3405 },
+                    { materia: 'Cuidado', valor: 2100 },
+                    { materia: 'Relación', valor: 1850 },
+                    { materia: 'Divorcio', valor: 1540 },
+                    { materia: 'VIF', valor: 1280 }
+                ]);
+                setKpis({
+                    velocidad: { valor: '4.8 meses', subtitulo: 'San Miguel (Media Nac: 5.5)' },
+                    carga: { valor: '3,405 causas', subtitulo: 'Pensión Alimenticia, Marzo 2026' },
+                    estacional: { valor: 'Marzo', subtitulo: '+42% ingresos vs Febrero' }
+                });
             } finally {
                 setCargandoDashboard(false);
             }

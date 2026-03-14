@@ -112,14 +112,11 @@ function NexoAppContent() {
                         </p>
                         <div className="nf-modal-features">
                             <div className="nf-modal-feature"><span>🧠</span> Diagnóstico inteligente guiado</div>
-                            <div className="nf-modal-feature"><span>🧮</span> Calculadora de deuda real (IPC)</div>
+                            <div className="nf-modal-feature"><span>🧮</span> Calculadora de pensión (IPC)</div>
                             <div className="nf-modal-feature"><span>📋</span> Interpreta causas judiciales</div>
                             <div className="nf-modal-feature"><span>🚦</span> Evalúa tu nivel de riesgo</div>
                             <div className="nf-modal-feature"><span>📄</span> Genera documentos legales</div>
-                            <div className="nf-modal-feature"><span>📊</span> Predictor de escenarios</div>
-                            <div className="nf-modal-feature"><span>🔔</span> Radar judicial automático</div>
-                            <div className="nf-modal-feature"><span>🔍</span> Escanea resoluciones</div>
-                            <div className="nf-modal-feature"><span>📍</span> Monitorea tus causas</div>
+                            <div className="nf-modal-feature"><span>💬</span> Comunidad de apoyo anónima</div>
                         </div>
                         <button className="nf-btn nf-btn-primary" onClick={closeOnboarding} style={{ width: '100%', marginTop: 8 }}>
                             🚀 Comenzar

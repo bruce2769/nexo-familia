@@ -1648,8 +1648,8 @@ a:hover {
     background: var(--nf-surface);
     border: 1px solid var(--nf-border);
     border-radius: var(--nf-radius-lg);
-    padding: 40px;
-    max-width: 480px;
+    padding: 30px;
+    max-width: 460px;
     width: 100%;
     max-height: 90vh;
     overflow-y: auto;

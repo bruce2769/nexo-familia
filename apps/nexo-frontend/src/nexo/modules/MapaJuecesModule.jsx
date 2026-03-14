@@ -383,7 +383,7 @@ export default function MapaJuecesModule() {
         <div className="nf-animate-in">
             <div className="nf-module-header">
                 <h1>🗺️ Inteligencia y Radar Judicial</h1>
-                <p>Nexo Ultra 2030: Análisis en tiempo real de más de 372.000 causas.</p>
+                <p>Nexo Ultra 2030: Análisis en tiempo real de causas judiciales históricas.</p>
                 <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
                     <button
                         className={`nf-btn ${vista === 'dashboard' ? 'nf-btn-primary' : 'nf-btn-ghost'} nf-btn-sm`}

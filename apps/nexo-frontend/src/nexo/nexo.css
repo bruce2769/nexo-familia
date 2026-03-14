@@ -1651,6 +1651,8 @@ a:hover {
     padding: 40px;
     max-width: 480px;
     width: 100%;
+    max-height: 90vh;
+    overflow-y: auto;
     text-align: center;
     animation: nfSlideUp .4s ease-out;
 }

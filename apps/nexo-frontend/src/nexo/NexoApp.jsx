@@ -4,7 +4,6 @@ import Navbar from './components/Navbar.jsx';
 import Footer from './components/Footer.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
 import CausaModule from './modules/CausaModule.jsx';
-import FinancieroModule from './modules/FinancieroModule.jsx';
 import RiesgoModule from './modules/RiesgoModule.jsx';
 import MuroModule from './modules/MuroModule.jsx';
 import GuiasModule from './modules/GuiasModule.jsx';
@@ -24,8 +23,7 @@ const TABS = [
     { id: 'diagnostico', label: '🧠 Diagnóstico', highlight: true },
     { id: 'copiloto', label: '🤖 Copiloto IA', highlight: true },
     { id: 'causa', label: '📋 Causa' },
-    { id: 'financiero', label: '💰 Financiero' },
-    { id: 'calculadora', label: '🧮 Calculadora' },
+    { id: 'calculadora', label: '🧮 Calculadora Financiera' },
     { id: 'radar', label: '🔔 Radar', highlight: true },
     { id: 'mapa-jueces', label: '🗺️ Mapa de Jueces', highlight: true },
     { id: 'riesgo', label: '🚦 Riesgo' },
@@ -71,7 +69,6 @@ function NexoAppContent() {
         switch (activeTab) {
             case 'diagnostico': return <DiagnosticoModule onNavigate={navigate} />;
             case 'causa': return <CausaModule />;
-            case 'financiero': return <FinancieroModule />;
             case 'calculadora': return <CalculadoraModule />;
             case 'radar': return <RadarModule onNavigate={navigate} />;
             case 'riesgo': return <RiesgoModule />;

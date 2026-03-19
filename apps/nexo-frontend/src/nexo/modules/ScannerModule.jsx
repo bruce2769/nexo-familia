@@ -12,7 +12,7 @@ export default function ScannerModule() {
 
     // ── Verificar que Ollama/backend esté disponible ──────────────────────────
     React.useEffect(() => {
-        fetch(`${BACKEND_URL}/health`)
+        fetch(`${BACKEND_URL}/api/v1/health/ollama`)
             .then(r => r.ok ? r.json() : Promise.reject())
             .then(() => setOllamaOk(true))
             .catch(() => setOllamaOk(false));

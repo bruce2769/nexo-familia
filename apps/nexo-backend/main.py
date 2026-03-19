@@ -12,26 +12,50 @@ import httpx
 import time
 from collections import defaultdict
 
+from loguru import logger
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 # ─── Firebase Admin SDK (para verificar tokens JWT) ───────────────────────
 # Se inicializa solo si existe la variable de entorno FIREBASE_SERVICE_ACCOUNT_JSON
 # En dev local sin esa variable, la validación se omite (modo permisivo local)
 try:
     import firebase_admin
-    from firebase_admin import credentials, auth as firebase_auth
+    from firebase_admin import credentials, auth as firebase_auth, firestore
 
     _sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     if _sa_json and not firebase_admin._apps:
-        import tempfile
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as f:
-            f.write(_sa_json)
-            _sa_path = f.name
-        cred = credentials.Certificate(_sa_path)
-        firebase_admin.initialize_app(cred)
-        FIREBASE_ADMIN_OK = True
+        try:
+            import json
+            cred_dict = json.loads(_sa_json)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            db = firestore.client()
+            FIREBASE_ADMIN_OK = True
+        except Exception as e:
+            print(f"❌ Error parseando FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+            import sys
+            sys.exit(1)
     else:
-        FIREBASE_ADMIN_OK = False
+        if firebase_admin._apps:
+            db = firestore.client()
+            FIREBASE_ADMIN_OK = True
+        else:
+            FIREBASE_ADMIN_OK = False
+            db = None
 except ImportError:
     FIREBASE_ADMIN_OK = False
+    db = None
+
+# ─── Validación de variables de entorno críticas ──────────────────────────────
+REQUIRED_ENV = ["ALLOWED_ORIGINS"]
+missing_env = [k for k in REQUIRED_ENV if not os.environ.get(k)]
+if missing_env:
+    print(f"❌ Variables de entorno faltantes en Python backend: {', '.join(missing_env)}")
+    print("📋 Copia .env.example como .env y rellena los valores.")
+    import sys
+    sys.exit(1)
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -75,6 +99,11 @@ app = FastAPI(
     description="Motor backend para Legal Analytics y recepción colaborativa de fallos.",
     version="1.0.0"
 )
+
+# ─── Configuración de Rate Limiting Global (SlowAPI) ───────────
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.get("/api/v1/health/ollama", tags=["IA"])
 async def check_ollama_health():
@@ -277,9 +306,10 @@ def pseudo_anonimizar(texto: str) -> str:
     # Aquí en el futuro se pueden agregar modelos NER (Spacy) para ocultar nombres propios
     return texto_limpio
 
-def llamar_ollama(prompt: str, system: str = "", temperatura: float = 0.3) -> str:
+def llamar_ollama(prompt: str, system: str = "", temperatura: float = 0.3, max_retries: int = 2) -> str:
     """
     Llama a Ollama local via HTTP y retorna el texto generado.
+    Integra sistema Timeout de 10s y Retry automático para alta disponibilidad.
     """
     payload = {
         "model": OLLAMA_MODEL,
@@ -290,18 +320,33 @@ def llamar_ollama(prompt: str, system: str = "", temperatura: float = 0.3) -> st
     if system:
         payload["system"] = system
 
-    try:
-        response = httpx.post(
-            f"{OLLAMA_URL}/api/generate",
-            json=payload,
-            timeout=120.0  # PDFs pueden ser largos, damos 2 minutos
-        )
-        response.raise_for_status()
-        return response.json().get("response", "")
-    except httpx.ConnectError:
-        raise RuntimeError(f"No se pudo conectar a Ollama en {OLLAMA_URL}. ¿Está corriendo 'ollama serve'?")
-    except Exception as e:
-        raise RuntimeError(f"Error llamando a Ollama: {e}")
+    for intento in range(max_retries + 1):
+        try:
+            logger.info(f"[Ollama] Solicitud al modelo {OLLAMA_MODEL} (Intento {intento + 1}/{max_retries + 1})...")
+            response = httpx.post(
+                f"{OLLAMA_URL}/api/generate",
+                json=payload,
+                timeout=10.0  # Timeout agresivo para fail-fast y retry
+            )
+            response.raise_for_status()
+            logger.success(f"[Ollama] Respuesta generada exitosamente en intento {intento + 1}.")
+            return response.json().get("response", "")
+        except httpx.TimeoutException:
+            logger.warning(f"⚠️ [Ollama] Timeout (10s) excedido en intento {intento + 1}.")
+            if intento == max_retries:
+                logger.error("❌ Timeout definitivo al contactar con Ollama. Agotados todos los retries.")
+                raise RuntimeError("Timeout al contactar con Ollama después de varios intentos.")
+            time.sleep(1)
+        except httpx.ConnectError:
+            logger.error(f"❌ [Ollama] No se pudo conectar a Ollama en {OLLAMA_URL} (intento {intento + 1}).")
+            if intento == max_retries:
+                raise RuntimeError(f"No se pudo conectar a Ollama en {OLLAMA_URL}. ¿Está corriendo 'ollama serve'?")
+            time.sleep(2)
+        except Exception as e:
+            logger.error(f"❌ [Ollama] Error inesperado en llamada: {e}")
+            if intento == max_retries:
+                raise RuntimeError(f"Error llamando a Ollama: {e}")
+            time.sleep(1)
 
 
 def clasificar_con_llm(texto_seguro: str) -> dict:
@@ -405,7 +450,8 @@ IMPORTANTE:
 
 # ─── Endpoint Scanner de Resoluciones (texto plano → Ollama) ─────────────────
 @app.post("/api/v1/scanner/analizar", tags=["IA"])
-async def analizar_resolucion(req: ScannerRequest, _user=Depends(verify_firebase_token)):
+@limiter.limit("20/minute") # Prevención de abuso costoso de IA
+async def analizar_resolucion(request: Request, req: ScannerRequest, _user=Depends(verify_firebase_token)):
     """
     Recibe texto de una resolución judicial, lo anonimiza y lo analiza con Ollama.
     Retorna un análisis estructurado: tipo, resumen, puntos clave, acción recomendada, riesgo.
@@ -446,9 +492,40 @@ Texto de la resolución:
             raise ValueError("Ollama no devolvió JSON válido")
         analisis = json.loads(json_match.group(0))
         analisis["fuente"] = "ollama"
+
+        # ─── Guardar en Firestore: scanner_historial ────────────────
+        if FIREBASE_ADMIN_OK and db is not None and _user is not None:
+            uid = _user.get("uid")
+            if uid:
+                from datetime import datetime, timezone
+                try:
+                    doc_ref = db.collection("usuarios").document(uid).collection("scanner_historial").document()
+                    doc_ref.set({
+                        "resumen": analisis.get("resumen", ""),
+                        "riesgo": analisis.get("riesgo", "medio"),
+                        "tipo": analisis.get("tipo", "Desconocido"),
+                        "timestamp": firestore.SERVER_TIMESTAMP,
+                        "fuente": analisis["fuente"]
+                    })
+                except Exception as e:
+                    logger.warning(f"⚠️ Error guardando historial en Firestore: {e}")
+        # ────────────────────────────────────────────────────────────
+
         return analisis
-    except RuntimeError as e:
-        raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        logger.error(f"❌ [Fallback Activado] El motor de IA falló definitivamente: {e}")
+        analisis_fallback = {
+            "resumen": "Nuestro sistema de IA se encuentra congestionado o en mantenimiento en este momento y no pudo completar el escaneo avanzado de este documento. Por favor, realiza una revisión humana.",
+            "puntos_clave": [
+                "Demasiado tráfico o timeout del motor.",
+                "Se requiere revisión manual temporal."
+            ],
+            "accion_recomendada": "Vuelve a intentar el escaneo en un par de horas o contacta soporte.",
+            "riesgo": "medio",
+            "tipo": "Resolución (Sin Analizar - Fallback)",
+            "fuente": "sistema-fallback"
+        }
+        return analisis_fallback
     except Exception as e:
         # Fallback estructurado si Ollama falla o devuelve JSON malformado
         return {

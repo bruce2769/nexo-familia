@@ -11,6 +11,12 @@ service cloud.firestore {
     // Solo el propio usuario puede leer/escribir su perfil
     match /usuarios/{uid} {
       allow read, write: if isAuth() && request.auth.uid == uid;
+
+      // ── Historial del Scanner (Solo Backend escribe) ────────
+      match /scanner_historial/{docId} {
+        allow read: if isAuth() && request.auth.uid == uid;
+        allow write: if false; // Sólo el backend lo escribe usando Admin SDK
+      }
     }
 
     // ── Diagnósticos ─────────────────────────────────────────

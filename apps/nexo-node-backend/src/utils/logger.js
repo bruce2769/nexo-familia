@@ -1,27 +1,21 @@
-const { createLogger, format, transports } = require('winston');
-const path = require('path');
+const pino = require('pino');
 
-const logger = createLogger({
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
-    format: format.combine(
-        format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
-        format.errors({ stack: true }),
-        format.colorize(),
-        format.printf(({ timestamp, level, message, ...meta }) => {
-            const metaStr = Object.keys(meta).length ? `\n${JSON.stringify(meta, null, 2)}` : '';
-            return `[${timestamp}] ${level}: ${message}${metaStr}`;
-        })
-    ),
-    transports: [
-        new transports.Console(),
-        new transports.File({
-            filename: path.join(__dirname, '../../logs/error.log'),
-            level: 'error'
-        }),
-        new transports.File({
-            filename: path.join(__dirname, '../../logs/combined.log')
-        })
-    ]
-});
+const isProduction = process.env.NODE_ENV === 'production';
+
+const transport = isProduction
+    ? undefined // En producción usa stdout json stream nativo de pino (el más rápido y seguro)
+    : pino.transport({
+        target: 'pino-pretty',
+        options: {
+            colorize: true,
+            translateTime: 'SYS:standard',
+            ignore: 'pid,hostname'
+        }
+    });
+
+const logger = pino({
+    level: process.env.LOG_LEVEL || (isProduction ? 'info' : 'debug'),
+    base: { service: 'nexo-backend', env: process.env.NODE_ENV }
+}, transport);
 
 module.exports = logger;

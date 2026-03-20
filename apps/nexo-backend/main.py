@@ -45,9 +45,9 @@ try:
             db = firestore.client()
             FIREBASE_ADMIN_OK = True
         except Exception as e:
-            print(f"❌ Error parseando FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
-            import sys
-            sys.exit(1)
+            print(f"⚠️ [WARNING] Abortando conexión a Firebase temporalmente. Error parseando FIREBASE_SERVICE_ACCOUNT_JSON: {e}")
+            FIREBASE_ADMIN_OK = False
+            db = None
     else:
         if firebase_admin._apps:
             db = firestore.client()

@@ -25,11 +25,8 @@ function initFirebase() {
         try {
             serviceAccount = JSON.parse(inlineJson);
         } catch (err) {
-            throw new Error(
-                '❌ FIREBASE_SERVICE_ACCOUNT_JSON contiene JSON inválido.\n' +
-                '💡 Asegúrate de que sea una sola línea sin saltos de línea escapados.\n' +
-                `   Detalle: ${err.message}`
-            );
+            logger.error(`[Firebase] ❌ FIREBASE_SERVICE_ACCOUNT_JSON inválido. Abortando inicio de Firebase, pero el servidor continuará activo.`);
+            return null;
         }
 
         admin.initializeApp({
@@ -46,12 +43,8 @@ function initFirebase() {
         );
 
         if (!fs.existsSync(serviceAccountPath)) {
-            throw new Error(
-                `❌ No se encontró el archivo de credenciales en: ${serviceAccountPath}\n` +
-                '📋 Opciones:\n' +
-                '   1. Dev local: descarga serviceAccountKey.json y colócalo en nexo-node-backend/\n' +
-                '   2. Producción: configura FIREBASE_SERVICE_ACCOUNT_JSON con el JSON inline'
-            );
+            logger.error(`[Firebase] ❌ No se encontró archivo de credenciales. Abortando inicio de Firebase, pero el servidor continuará activo.`);
+            return null;
         }
 
         const serviceAccount = JSON.parse(fs.readFileSync(serviceAccountPath, 'utf8'));

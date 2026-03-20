@@ -28,7 +28,18 @@ try:
     if _sa_json and not firebase_admin._apps:
         try:
             import json
-            cred_dict = json.loads(_sa_json)
+            # Intento 1: Carga directa
+            try:
+                cred_dict = json.loads(_sa_json, strict=False)
+            except json.JSONDecodeError:
+                # Intento 2: Railway a veces escapa las barras \n nativas o inyecta basura
+                fixed_json = _sa_json.replace('\\\\n', '\\n').replace('\n', '\\n')
+                # Si falla por "Invalid \escape", eliminamos backslashes inválidos
+                fixed_json = fixed_json.replace('\\', '\\\\')
+                # Restauramos los saltos de línea correctos para JSON
+                fixed_json = fixed_json.replace('\\\\n', '\\n')
+                cred_dict = json.loads(fixed_json, strict=False)
+                
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             db = firestore.client()

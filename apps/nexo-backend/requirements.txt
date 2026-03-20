@@ -8,3 +8,4 @@ PyMuPDF>=1.23.8
 loguru>=0.7.2
 slowapi>=0.1.8
 requests>=2.31.0
+python-multipart>=0.0.5

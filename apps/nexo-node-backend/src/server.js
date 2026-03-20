@@ -69,7 +69,7 @@ app.use('/api/radar', radarRoutes);
 app.use('/api/jueces', mapaJuecesRoutes);
 
 // Health check
-app.get('/health', (_req, res) => {
+app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString(), service: 'nexo-node-backend' });
 });
 

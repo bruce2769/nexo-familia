@@ -192,7 +192,7 @@ async function runScrapingCycle() {
         logger.info('─'.repeat(60));
 
     } catch (err) {
-        logger.error('[Scheduler] Error crítico en ciclo de scraping:', err);
+        logger.error('[Scheduler] Error crítico en ciclo de scraping:', err.message, err.stack);
     } finally {
         isRunning = false;
     }

@@ -42,7 +42,7 @@ export default function ScannerModule() {
                  headers['Authorization'] = `Bearer ${token}`;
             }
 
-            const res = await fetch(`${BACKEND_URL}/api/v1/causas/procesar`, {
+            const res = await fetch(`${BACKEND_URL}/causas/procesar`, {
                 method: 'POST',
                 headers,
                 body: formData,

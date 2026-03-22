@@ -256,23 +256,16 @@ IMPORTANTE:
     except Exception as e:
         raise HTTPException(status_code=503, detail=f"Servicio de IA no disponible: {str(e)[:100]}")
 
-# ─── Endpoint Scanner con caché MD5 ───────────────────────────────────────────
-@app.post("/api/v1/scanner/analizar", tags=["IA"])
-@limiter.limit("20/minute")
-async def analizar_resolucion(request: Request, req: ScannerRequest, _user=Depends(verify_firebase_token)):
-    """
-    Analiza una resolución judicial con OpenAI gpt-4o-mini.
-    🔥 Caché MD5 en Firestore: textos idénticos → respuesta instantánea ($0).
-    """
-    texto = req.texto.strip()
+# ─── Lógica Core del Scanner ────────────────────────────────────────────────
+def _procesar_texto_scanner(texto: str, uid: str | None = None) -> dict:
+    texto = texto.strip()
     if len(texto) < 20:
-        raise HTTPException(status_code=400, detail="El texto es demasiado corto.")
+        raise HTTPException(status_code=400, detail="El texto o PDF es demasiado corto/ilegible.")
 
     # 💡 Recorte a 800 chars (–60% tokens)
     texto_seguro = pseudo_anonimizar(texto[:800])
 
     # 🔐 Límite diario por usuario
-    uid = _user.get("uid") if _user else None
     if uid and not _verificar_limite_diario(uid):
         raise HTTPException(status_code=429, detail=f"Límite de {MAX_IA_REQUESTS_PER_DAY} análisis/día alcanzado.")
 
@@ -332,6 +325,40 @@ Resolución:
             "fuente": "fallback",
             "error": str(e)[:100]
         }
+
+# ─── Endpoint Scanner (Texto) ──────────────────────────────────────────────────
+@app.post("/api/v1/scanner/analizar", tags=["IA"])
+@limiter.limit("20/minute")
+async def analizar_resolucion(request: Request, req: ScannerRequest, _user=Depends(verify_firebase_token)):
+    """
+    Analiza una resolución judicial con OpenAI gpt-4o-mini a partir de texto.
+    🔥 Caché MD5 en Firestore activo.
+    """
+    uid = _user.get("uid") if _user else None
+    return _procesar_texto_scanner(req.texto, uid)
+
+# ─── Endpoint Scanner (Archivo PDF) ───────────────────────────────────────────
+@app.post("/api/v1/scanner/subir", tags=["IA"])
+@limiter.limit("20/minute")
+async def subir_resolucion_scanner(request: Request, archivo: UploadFile = File(...), _user=Depends(verify_firebase_token)):
+    """
+    Analiza una resolución judicial subiendo un archivo PDF.
+    Extrae texto y utiliza exactamente la misma lógica de IA y caché del scanner.
+    """
+    if not archivo.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Solo se permiten archivos PDF.")
+    try:
+        contenido = await archivo.read()
+        doc = fitz.Document(stream=contenido, filetype="pdf")
+        texto_crudo = "".join(p.get_text() for p in doc)
+        
+        uid = _user.get("uid") if _user else None
+        return _procesar_texto_scanner(texto_crudo, uid)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ [Scanner PDF] Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error procesando el PDF: {e}")
 
 # ─── Subir sentencia colaborativa (PDF) ───────────────────────────────────────
 @app.post("/api/v1/sentencias/subir", tags=["Colaborativo"])

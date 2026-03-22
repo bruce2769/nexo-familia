@@ -4,23 +4,39 @@ const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8
 
 export default function ScannerModule() {
     const [text, setText]       = useState('');
+    const [file, setFile]       = useState(null);
     const [result, setResult]   = useState(null);
     const [loading, setLoading] = useState(false);
     const [method, setMethod]   = useState('text');
     const [error, setError]     = useState(null);
 
     const handleAnalyze = async () => {
-        if (!text.trim()) return;
+        if (method !== 'upload' && !text.trim()) return;
+        if (method === 'upload' && !file) {
+            setError('Por favor selecciona un archivo PDF.');
+            return;
+        }
+
         setLoading(true);
         setError(null);
         setResult(null);
 
         try {
-            const res = await fetch(`${BACKEND_URL}/api/v1/scanner/analizar`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ texto: text }),
-            });
+            let res;
+            if (method === 'upload') {
+                const formData = new FormData();
+                formData.append('archivo', file);
+                res = await fetch(`${BACKEND_URL}/api/v1/scanner/subir`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            } else {
+                res = await fetch(`${BACKEND_URL}/api/v1/scanner/analizar`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ texto: text }),
+                });
+            }
 
             const data = await res.json();
             if (!res.ok) throw new Error(data.detail || 'Error desconocido del servidor');
@@ -32,7 +48,7 @@ export default function ScannerModule() {
         }
     };
 
-    const handleReset = () => { setText(''); setResult(null); setError(null); };
+    const handleReset = () => { setText(''); setFile(null); setResult(null); setError(null); };
 
     return (
         <div>
@@ -58,24 +74,50 @@ export default function ScannerModule() {
                         <button type="button" className={`nf-type-option${method === 'describe' ? ' active' : ''}`} onClick={() => setMethod('describe')}>
                             <span>💬</span> Describir
                         </button>
+                        <button type="button" className={`nf-type-option${method === 'upload' ? ' active' : ''}`} onClick={() => setMethod('upload')}>
+                            <span>📄</span> Subir PDF
+                        </button>
                     </div>
 
                     <div className="nf-form">
-                        <div className="nf-field">
-                            <label className="nf-label">
-                                {method === 'text' ? 'Texto de la Resolución' : 'Describe qué dice la resolución'}
-                            </label>
-                            <textarea
-                                className="nf-textarea"
-                                style={{ minHeight: 180 }}
-                                placeholder={method === 'text'
-                                    ? 'Pega aquí el texto completo de la resolución judicial...\n\nEj: "VISTOS: Se practica liquidación de la deuda de pensiones de alimentos adeudadas..."'
-                                    : 'Describe en tus palabras qué dice el documento que recibiste...\n\nEj: "Me llegó un papel que dice que tengo que pagar una deuda..."'
-                                }
-                                value={text}
-                                onChange={e => setText(e.target.value)}
-                            />
-                        </div>
+                        {method === 'upload' ? (
+                            <div className="nf-field">
+                                <label className="nf-label">Sube tu resolución en PDF</label>
+                                <div style={{ border: '2px dashed var(--nf-border)', padding: '30px 20px', textAlign: 'center', borderRadius: 12, background: 'var(--nf-bg-secondary)', cursor: 'pointer', transition: 'all 0.2s' }} className="nf-upload-zone hover-border">
+                                    <input 
+                                        type="file" 
+                                        accept=".pdf" 
+                                        onChange={e => setFile(e.target.files[0])} 
+                                        style={{ display: 'none' }} 
+                                        id="pdf-upload"
+                                    />
+                                    <label htmlFor="pdf-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%' }}>
+                                        <span style={{ fontSize: 36 }}>{file ? '📄' : '📤'}</span>
+                                        <span style={{ fontWeight: 500, fontSize: 16, color: file ? 'var(--nf-primary)' : 'inherit' }}>
+                                            {file ? file.name : 'Haz clic aquí para seleccionar un PDF'}
+                                        </span>
+                                        {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>Solo archivos .pdf habilitados</span>}
+                                        {file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB — Haz clic para cambiar archivo</span>}
+                                    </label>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="nf-field">
+                                <label className="nf-label">
+                                    {method === 'text' ? 'Texto de la Resolución' : 'Describe qué dice la resolución'}
+                                </label>
+                                <textarea
+                                    className="nf-textarea"
+                                    style={{ minHeight: 180 }}
+                                    placeholder={method === 'text'
+                                        ? 'Pega aquí el texto completo de la resolución judicial...\n\nEj: "VISTOS: Se practica liquidación de la deuda de pensiones de alimentos adeudadas..."'
+                                        : 'Describe en tus palabras qué dice el documento que recibiste...\n\nEj: "Me llegó un papel que dice que tengo que pagar una deuda..."'
+                                    }
+                                    value={text}
+                                    onChange={e => setText(e.target.value)}
+                                />
+                            </div>
+                        )}
 
                         {error && (
                             <div style={{ color: 'var(--nf-red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 14 }}>
@@ -86,7 +128,7 @@ export default function ScannerModule() {
                         <button
                             className="nf-btn nf-btn-primary"
                             onClick={handleAnalyze}
-                            disabled={loading || !text.trim()}
+                            disabled={loading || (method === 'upload' ? !file : !text.trim())}
                             style={{ alignSelf: 'flex-start' }}
                         >
                             {loading ? '🧠 Analizando con IA...' : '🔍 Analizar Resolución'}

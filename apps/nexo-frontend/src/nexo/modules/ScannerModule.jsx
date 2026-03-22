@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
+console.log('🔗 API URL:', BACKEND_URL);
 
 export default function ScannerModule() {
     const [text, setText]       = useState('');
@@ -53,7 +54,10 @@ export default function ScannerModule() {
             console.log("JSON extraído:", data);
             setResult(data);
         } catch (err) {
-            setError(err.message);
+            const msg = err.message === 'Failed to fetch'
+                ? `Error de conexión: no se pudo contactar el servidor (${BACKEND_URL}). Verifica tu conexión o intenta más tarde.`
+                : err.message;
+            setError(msg);
         } finally {
             setLoading(false);
         }

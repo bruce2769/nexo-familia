@@ -67,13 +67,11 @@ except ImportError:
     db = None
 
 
-# ─── Validación de variables de entorno críticas ───────────────────────────────
+# ─── Validación de variables de entorno (warning, no crash) ─────────────────────
 REQUIRED_ENV = ["ALLOWED_ORIGINS", "OPENAI_API_KEY"]
 missing_env = [k for k in REQUIRED_ENV if not os.environ.get(k)]
 if missing_env:
-    logger.error(f"❌ Variables de entorno faltantes: {', '.join(missing_env)}")
-    import sys
-    sys.exit(1)
+    logger.warning(f"⚠️ Variables de entorno faltantes (modo degradado): {', '.join(missing_env)}")
 
 _bearer_scheme = HTTPBearer(auto_error=False)
 
@@ -122,22 +120,32 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ─── CORS ──────────────────────────────────────────────────────────────────────
-_raw_origins = os.environ.get("ALLOWED_ORIGINS", "http://localhost:5173")
-ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-
+# ─── CORS global (permite cualquier origen: Vercel, localhost, etc.) ────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# ─── Middleware de logging de requests ─────────────────────────────────────────
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    logger.info(f"→ {request.method} {request.url.path} | client={request.client.host if request.client else 'unknown'}")
+    response = await call_next(request)
+    logger.info(f"← {request.method} {request.url.path} | status={response.status_code}")
+    return response
+
 # ─── Health check ──────────────────────────────────────────────────────────────
 @app.get("/health", tags=["Health"])
 async def health_check():
-    return {"status": "ok", "version": "2.0.0", "ia": "openai", "model": OPENAI_MODEL}
+    return {"ok": True, "status": "ok", "version": "2.0.0", "ia": "openai", "model": OPENAI_MODEL}
+
+@app.get("/api/health", tags=["Health"])
+async def api_health_check():
+    """Alias de /health para compatibilidad con frontends."""
+    return {"ok": True, "status": "ok", "version": "2.0.0", "ia": "openai", "model": OPENAI_MODEL}
 
 # ─── Helpers de base de datos SQLite ──────────────────────────────────────────
 def get_db_connection():
@@ -607,6 +615,7 @@ Texto:
     if db:
         try:
             db.collection('causas').add(doc_final)
+            logger.info("✅ Documento guardado correctamente en Firebase")
         except Exception as e:
             logger.error(f"Error guardando causa en FB: {e}")
 

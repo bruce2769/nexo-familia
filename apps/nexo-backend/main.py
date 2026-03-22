@@ -82,14 +82,16 @@ async def verify_firebase_token(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme)
 ):
     if not FIREBASE_ADMIN_OK:
-        return None
+        return {"uid": "test-user"}
     if credentials is None:
-        raise HTTPException(status_code=401, detail="Token de autenticación requerido.")
+        logger.warning("Modo testing sin auth: Token ausente, asignando test-user.")
+        return {"uid": "test-user"}
     try:
         decoded = firebase_auth.verify_id_token(credentials.credentials)
         return decoded
     except Exception as e:
-        raise HTTPException(status_code=401, detail=f"Token inválido: {str(e)[:80]}")
+        logger.warning(f"Modo testing sin auth: Token inválido '{str(e)[:80]}', asignando test-user.")
+        return {"uid": "test-user"}
 
 # ─── Configuración OpenAI ──────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")

@@ -109,7 +109,9 @@ export default function ScannerModule() {
                                             {file ? file.name : (method === 'pdf' ? 'Haz clic aquí para seleccionar un PDF' : 'Haz clic aquí para tomar o subir una foto')}
                                         </span>
                                         {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{method === 'pdf' ? 'Solo archivos .pdf' : 'Soportado: JPG, PNG, WEBP'}</span>}
-                                        {file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB — Haz clic para cambiar archivo</span>}
+                                        {file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>
+                                            {file.size > 1024 * 1024 ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : (file.size / 1024).toFixed(1) + ' KB'} — Haz clic para cambiar archivo
+                                        </span>}
                                     </label>
                                 </div>
                             </div>

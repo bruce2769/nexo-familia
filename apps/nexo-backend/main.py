@@ -13,6 +13,25 @@ import base64
 import time
 from collections import defaultdict
 from datetime import date, datetime, timezone
+import io
+
+try:
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.units import cm
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+    from reportlab.lib.enums import TA_RIGHT, TA_CENTER, TA_JUSTIFY
+    REPORTLAB_OK = True
+except ImportError:
+    REPORTLAB_OK = False
+
+try:
+    from docx import Document
+    from docx.shared import Cm, Pt
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+    DOCX_OK = True
+except ImportError:
+    DOCX_OK = False
 
 from loguru import logger
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -158,6 +177,23 @@ def get_db_connection():
 def pseudo_anonimizar(texto: str) -> str:
     patron_rut = r'\b\d{1,2}\.?\d{3}\.?\d{3}[-][0-9kK]\b'
     return re.sub(patron_rut, "[RUT_OCULTO]", texto)
+
+def validar_rut_chileno(rut: str) -> bool:
+    if not rut: return False
+    rut_limpio = rut.upper().replace("-", "").replace(".", "").strip()
+    if len(rut_limpio) < 2: return False
+    cuerpo, dv = rut_limpio[:-1], rut_limpio[-1]
+    if not cuerpo.isdigit(): return False
+    suma = 0
+    multiplo = 2
+    for c in reversed(cuerpo):
+        suma += int(c) * multiplo
+        multiplo = multiplo + 1 if multiplo < 7 else 2
+    esperado = 11 - (suma % 11)
+    if esperado == 11: dv_esp = '0'
+    elif esperado == 10: dv_esp = 'K'
+    else: dv_esp = str(esperado)
+    return dv == dv_esp
 
 def _generar_hash_md5(texto: str) -> str:
     texto_normalizado = re.sub(r'\s+', ' ', texto.strip().lower())
@@ -742,6 +778,10 @@ async def generar_escrito(
     Genera un escrito legal profesional al nivel de un abogado chileno.
     Produce: (A) Escrito formal para tribunal + (B) Explicación simple para el usuario.
     """
+    if req.rut_usuario and req.rut_usuario.strip() != "":
+        if not validar_rut_chileno(req.rut_usuario):
+            raise HTTPException(status_code=400, detail="El RUT ingresado no es válido. Verifica el dígito verificador y formato.")
+
     uid = _user.get("uid") if _user else "test-user"
 
     tipo_label = TIPOS_ESCRITO.get(req.tipo_escrito, req.tipo_escrito)
@@ -829,6 +869,11 @@ Genera el escrito ahora:"""
         if not json_match:
             raise ValueError("La IA no devolvió JSON válido")
         resultado = json.loads(json_match.group(0))
+        
+        escrito_formal_text = resultado.get("escrito_formal", "")
+        pdf_base64 = generar_pdf_basico(escrito_formal_text, req)
+        docx_base64 = generar_docx_basico(escrito_formal_text, req)
+        
     except Exception as e:
         logger.error(f"[Escritos] Error generando escrito: {e}")
         raise HTTPException(status_code=503, detail=f"Error generando el escrito: {str(e)[:120]}")
@@ -859,14 +904,108 @@ Genera el escrito ahora:"""
     return {
         "tipo": req.tipo_escrito,
         "tipo_label": tipo_label,
-        "escrito_formal": resultado.get("escrito_formal", ""),
+        "escrito_formal": escrito_formal_text,
         "explicacion_simple": resultado.get("explicacion_simple", ""),
         "advertencias": resultado.get("advertencias", []),
+        "pdf_base64": pdf_base64,
+        "docx_base64": docx_base64,
         "leyes_citadas": leyes,
     }
 
+def generar_pdf_basico(texto_escrito: str, req: EscritoRequest) -> str:
+    if not REPORTLAB_OK: return ""
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer, pagesize=letter,
+        rightMargin=2.5*cm, leftMargin=2.5*cm, topMargin=2.5*cm, bottomMargin=2.5*cm
+    )
+    styles = getSampleStyleSheet()
+    style_normal = ParagraphStyle(
+        'LegalNormal', parent=styles['Normal'],
+        fontName='Helvetica', fontSize=12, leading=18, alignment=TA_JUSTIFY
+    )
+    style_header = ParagraphStyle(
+        'LegalHeader', parent=styles['Normal'],
+        fontName='Helvetica-Bold', fontSize=12, leading=15, alignment=TA_RIGHT
+    )
+    style_center = ParagraphStyle(name='Center', fontName='Helvetica', fontSize=12, alignment=TA_CENTER)
+    
+    story = []
+    lines = texto_escrito.split('\n')
+    body_started = False
+    
+    for line in lines:
+        text = line.strip()
+        if not text:
+            story.append(Spacer(1, 12))
+            continue
+            
+        if not body_started and text.upper().startswith(("SUMA:", "S U M A :", "RIT:", "MATERIA:", "EN LO PRINCIPAL", "TRIBUNAL")):
+            story.append(Paragraph(text, style_header))
+        else:
+            if "S.J.L." in text.upper() or "S.S." in text.upper() or "S.S.ª" in text.upper():
+                body_started = True
+            story.append(Paragraph(text, style_normal))
+            story.append(Spacer(1, 6))
+            
+    # Firma
+    story.append(Spacer(1, 3*cm))
+    story.append(Paragraph("___________________________", style_center))
+    story.append(Paragraph(req.nombre_usuario.upper(), style_center))
+    story.append(Paragraph(f"RUT: {req.rut_usuario}", style_center))
+
+    try:
+        doc.build(story)
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"[ReportLab] Error: {e}")
+        return ""
+
+def generar_docx_basico(texto_escrito: str, req: EscritoRequest) -> str:
+    if not DOCX_OK: return ""
+    try:
+        doc = Document()
+        for section in doc.sections:
+            section.top_margin = Cm(2.5)
+            section.bottom_margin = Cm(2.5)
+            section.left_margin = Cm(2.5)
+            section.right_margin = Cm(2.5)
+            
+        lines = texto_escrito.split('\n')
+        body_started = False
+        
+        for line in lines:
+            text = line.strip()
+            if not text:
+                continue
+            p = doc.add_paragraph()
+            p.paragraph_format.line_spacing = 1.5
+            run = p.add_run(text)
+            run.font.name = 'Arial'
+            run.font.size = Pt(12)
+            
+            if not body_started and text.upper().startswith(("SUMA:", "S U M A :", "RIT:", "MATERIA:", "EN LO PRINCIPAL", "TRIBUNAL")):
+                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                run.bold = True
+            else:
+                if "S.J.L." in text.upper() or "S.S." in text.upper() or "S.S.ª" in text.upper():
+                    body_started = True
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        doc.add_paragraph()
+        p_firma = doc.add_paragraph()
+        p_firma.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        run_f = p_firma.add_run(f"___________________________\n{req.nombre_usuario.upper()}\n[RUT: {req.rut_usuario}]")
+        run_f.font.name = 'Arial'
+        run_f.font.size = Pt(12)
+        
+        buffer = io.BytesIO()
+        doc.save(buffer)
+        return base64.b64encode(buffer.getvalue()).decode('utf-8')
+    except Exception as e:
+        logger.error(f"[python-docx] Error: {e}")
+        return ""    
 @app.get("/api/v1/escritos/tipos", tags=["Escritos"])
 async def listar_tipos_escrito():
     """Lista todos los tipos de escritos disponibles."""
-    return [{"id": k, "label": v} for k, v in TIPOS_ESCRITO.items()]
 

@@ -18,6 +18,7 @@ import CalculadoraModule from './modules/CalculadoraModule.jsx';
 import AuthModule from './modules/AuthModule.jsx'; // Nuevo módulo de login
 import CopilotoModule from './modules/CopilotoModule.jsx'; // Nuevo módulo copiloto offline
 import MapaJuecesModule from './modules/MapaJuecesModule.jsx'; // Pilar 3: ML de Sentencias
+import EscritosModule from './modules/EscritosModule.jsx'; // Generador de escritos legales
 import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; // Nuevo contexto
 
 const TABS = [
@@ -32,6 +33,7 @@ const TABS = [
     { id: 'estado', label: '📍 Mis Causas' },
     { id: 'documentos', label: '📄 Documentos' },
     { id: 'scanner', label: '🔍 Escáner' },
+    { id: 'escritos', label: '📝 Escritos Legales', highlight: true },
     { id: 'guias', label: '📚 Guías' },
     { id: 'glosario', label: '📖 Glosario' },
     { id: 'historial', label: '🕐 Historial' }
@@ -76,6 +78,7 @@ function NexoAppContent() {
             case 'estado': return <EstadoModule />;
             case 'documentos': return <DocumentosModule />;
             case 'scanner': return <ScannerModule />;
+            case 'escritos': return <EscritosModule />;
             case 'muro': return <MuroModule />;
             case 'guias': return <GuiasModule />;
             case 'glosario': return <GlosarioModule />;

@@ -695,3 +695,149 @@ def mis_causas_endpoint(request: Request, usuario: dict = Depends(verify_firebas
     except Exception as e:
         logger.error(f"Error obteniendo causas: {e}")
         return []
+
+
+# =====================================================================
+#  MÓDULO: GENERADOR DE ESCRITOS LEGALES PROFESIONALES
+# =====================================================================
+
+TIPOS_ESCRITO = {
+    "rebaja_pension": "Solicitud de Rebaja de Pensión Alimenticia",
+    "cumplimiento_pension": "Solicitud de Cumplimiento de Pensión Alimenticia",
+    "solicitud_liquidacion": "Solicitud de Liquidación de Deuda de Alimentos",
+    "cese_alimentos": "Solicitud de Cese de Obligación Alimenticia",
+    "regimen_visitas": "Solicitud de Régimen de Relación Directa y Regular",
+    "medidas_apremio": "Solicitud de Medidas de Apremio por Incumplimiento",
+}
+
+LEYES_REFERENCIA = {
+    "rebaja_pension": ["Ley N°14.908 art. 10 (rebaja por cambio de circunstancias)", "Código Civil art. 332"],
+    "cumplimiento_pension": ["Ley N°14.908 art. 14 (apremios)", "Ley N°19.968 art. 66 (ejecución de sentencias)"],
+    "solicitud_liquidacion": ["Ley N°14.908 art. 18 (liquidación de deuda)", "Auto Acordado CS sobre liquidaciones"],
+    "cese_alimentos": ["Código Civil art. 332 (causales de cese)", "Ley N°14.908 art. 10 inc. final"],
+    "regimen_visitas": ["Ley N°19.968 art. 48 (acuerdos sobre relación directa)", "Código Civil art. 229 (derecho del hijo)"],
+    "medidas_apremio": ["Ley N°14.908 art. 14 (arresto nocturno)", "Ley N°14.908 art. 16 (retención de fondos)"],
+}
+
+class EscritoRequest(BaseModel):
+    tipo_escrito: str          # uno de TIPOS_ESCRITO keys
+    situacion: str             # descripción libre del usuario
+    tribunal: str = ""
+    rit: str = ""
+    nombre_usuario: str = "COMPARECIENTE"
+    rut_usuario: str = ""
+    contraparte: str = ""
+
+@app.post("/api/v1/escritos/generar", tags=["Escritos"])
+@limiter.limit("10/minute")
+async def generar_escrito(
+    request: Request,
+    req: EscritoRequest,
+    _user=Depends(verify_firebase_token)
+):
+    """
+    Genera un escrito legal profesional al nivel de un abogado chileno.
+    Produce: (A) Escrito formal para tribunal + (B) Explicación simple para el usuario.
+    """
+    uid = _user.get("uid") if _user else "test-user"
+
+    tipo_label = TIPOS_ESCRITO.get(req.tipo_escrito, req.tipo_escrito)
+    leyes = LEYES_REFERENCIA.get(req.tipo_escrito, ["Ley N°14.908", "Ley N°19.968"])
+    leyes_texto = " | ".join(leyes)
+
+    tribunal_str = req.tribunal or "TRIBUNAL DE FAMILIA COMPETENTE"
+    rit_str = f"RIT: {req.rit}" if req.rit else "RIT: A determinarse"
+    nombre = req.nombre_usuario or "EL/LA COMPARECIENTE"
+    rut = f", RUT {req.rut_usuario}," if req.rut_usuario else ","
+    contraparte = req.contraparte or "la contraparte"
+
+    system_prompt = """Eres un abogado senior especialista en Derecho de Familia chileno con 20 años de experiencia litigando en Tribunales de Familia.
+
+Tu rol es redactar escritos judiciales que:
+1. Sean formalmente correctos según la práctica forense chilena
+2. Usen terminología jurídica precisa pero accesible
+3. Citen leyes chilenas vigentes y aplicables al caso concreto
+4. Tengan la estructura exacta que usan los abogados ante Tribunales de Familia
+5. Sean presentables en tribunal SIN modificaciones
+
+REGLAS ABSOLUTAS:
+- NUNCA incluyas explicaciones al usuario dentro del escrito
+- NUNCA uses frases como "te recomiendo", "deberías", "mi consejo"
+- SIEMPRE usa "S.S." o "S.S.ª" para referirte al juez
+- SIEMPRE usa "SS.MM." para el plural
+- El escrito debe sonar como redactado por un abogado, no por una IA
+- Usa "Por tanto" o "Por estas razones" antes de la petición
+- La petición debe ser CONCRETA y ESPECÍFICA
+
+Responde SOLO con un JSON con exactamente estas claves:
+{
+  "escrito_formal": "texto completo del escrito con formato legal",
+  "explicacion_simple": "explicación en 3-4 párrafos cortos para el usuario sin términos legales",
+  "advertencias": ["lista de cosas que el usuario debe verificar o completar"]
+}"""
+
+    prompt = f"""Redacta un escrito judicial de tipo: {tipo_label}
+
+DATOS DEL CASO:
+- Tribunal: {tribunal_str}
+- {rit_str}
+- Nombre del compareciente: {nombre}
+- RUT: {req.rut_usuario or "No especificado"}
+- Contraparte: {contraparte}
+- Situación del usuario: {req.situacion}
+
+LEYES APLICABLES A CITAR: {leyes_texto}
+
+ESTRUCTURA OBLIGATORIA DEL ESCRITO:
+1. ENCABEZADO: "{tribunal_str} / {rit_str}"
+2. COMPARECENCIA: "Yo, {nombre}{rut} domiciliado en [DOMICILIO], en autos caratulados [NOMBRE CAUSA]..."
+3. EXPONGO / EXPONE: Hechos ordenados numéricamente, claros y concisos
+4. FUNDAMENTOS DE DERECHO: Citar artículos exactos de las leyes {leyes_texto}
+5. POR TANTO: Petición concreta al tribunal
+6. OTROSÍ: Solo si el tipo de escrito lo requiere (acompañar documentos, etc.)
+7. [Ciudad], [fecha] / Firma: "{nombre} / RUT: {req.rut_usuario or '___________'}"
+
+IMPORTANTE: El escrito debe poder presentarse directamente en tribunal. Usa [COMPLETAR] para campos que el usuario debe llenar (domicilio, fechas específicas, montos concretos si no se proporcionaron).
+
+Genera el escrito ahora:"""
+
+    try:
+        respuesta_raw = llamar_openai(prompt, system=system_prompt, temperatura=0.15, max_tokens=2000)
+        json_match = re.search(r'\{[\s\S]*\}', respuesta_raw)
+        if not json_match:
+            raise ValueError("La IA no devolvió JSON válido")
+        resultado = json.loads(json_match.group(0))
+    except Exception as e:
+        logger.error(f"[Escritos] Error generando escrito: {e}")
+        raise HTTPException(status_code=503, detail=f"Error generando el escrito: {str(e)[:120]}")
+
+    # Guardar en Firestore para historial
+    if db and uid:
+        try:
+            db.collection("escritos").add({
+                "userId": uid,
+                "tipo": req.tipo_escrito,
+                "tipoLabel": tipo_label,
+                "tribunal": req.tribunal,
+                "rit": req.rit,
+                "createdAt": datetime.now(timezone.utc).isoformat(),
+                "preview": resultado.get("escrito_formal", "")[:200],
+            })
+            logger.info(f"✅ Escrito guardado en Firebase para user {uid}")
+        except Exception as e:
+            logger.warning(f"[Escritos] No se pudo guardar en Firebase: {e}")
+
+    return {
+        "tipo": req.tipo_escrito,
+        "tipo_label": tipo_label,
+        "escrito_formal": resultado.get("escrito_formal", ""),
+        "explicacion_simple": resultado.get("explicacion_simple", ""),
+        "advertencias": resultado.get("advertencias", []),
+        "leyes_citadas": leyes,
+    }
+
+@app.get("/api/v1/escritos/tipos", tags=["Escritos"])
+async def listar_tipos_escrito():
+    """Lista todos los tipos de escritos disponibles."""
+    return [{"id": k, "label": v} for k, v in TIPOS_ESCRITO.items()]
+

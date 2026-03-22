@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <rect width="512" height="512" fill="url(#bg-gradient)" rx="112" />
+    <defs>
+        <linearGradient id="bg-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#3b82f6" />
+            <stop offset="100%" stop-color="#8b5cf6" />
+        </linearGradient>
+    </defs>
+    
+    <!-- Abstract Nexo Familia Logo / Scales of Justice modern concept -->
+    <path d="M256 120 L256 160" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+    <path d="M120 160 L392 160" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+    
+    <!-- Left Scale -->
+    <path d="M140 160 L100 280 L180 280 Z" fill="none" stroke="#ffffff" stroke-width="16" stroke-linejoin="round"/>
+    <!-- Right Scale -->
+    <path d="M372 160 L332 280 L412 280 Z" fill="none" stroke="#ffffff" stroke-width="16" stroke-linejoin="round"/>
+    
+    <!-- Central Pillar -->
+    <path d="M220 160 L220 360 L292 360 L292 160" fill="none" stroke="#ffffff" stroke-width="24" stroke-linejoin="round"/>
+    
+    <!-- Base -->
+    <path d="M160 360 L352 360" stroke="#ffffff" stroke-width="32" stroke-linecap="round"/>
+    <path d="M120 400 L392 400" stroke="#ffffff" stroke-width="24" stroke-linecap="round"/>
+</svg>

@@ -1,4 +1,7 @@
 import React, { useState } from 'react';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
+import { saveAs } from 'file-saver';
+import { jsPDF } from 'jspdf';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
@@ -12,15 +15,20 @@ const TIPOS = [
 ];
 
 export default function EscritosModule() {
-    const [step, setStep]         = useState('tipo');   // tipo → datos → resultado
+    const [step, setStep]         = useState('tipo');   // tipo → causa → personal → resultado
     const [tipo, setTipo]         = useState(null);
     const [form, setForm]         = useState({
+        // Datos causa
         situacion:      '',
         tribunal:       '',
         rit:            '',
+        contraparte:    '',
+        // Datos personales
         nombre_usuario: '',
         rut_usuario:    '',
-        contraparte:    '',
+        direccion_usuario: '',
+        telefono_usuario: '',
+        email_usuario: '',
     });
     const [resultado, setResultado] = useState(null);
     const [loading, setLoading]     = useState(false);
@@ -28,17 +36,31 @@ export default function EscritosModule() {
     const [showFormal, setShowFormal] = useState(true);
     const [copied, setCopied]         = useState(false);
 
-    const seleccionarTipo = (t) => {
-        setTipo(t);
-        setStep('datos');
+    const checkRUT = (rut) => {
+        const cleanRut = rut.replace(/[^0-9kK-]/g, '');
+        return /^[0-9]+-[0-9kK]{1}$/.test(cleanRut);
+    };
+
+    const avanzarAPersonal = () => {
+        if (!form.situacion.trim()) {
+            setError('Por favor describe tu situación judicial.');
+            return;
+        }
         setError(null);
+        setStep('personal');
     };
 
     const generar = async () => {
-        if (!form.situacion.trim()) {
-            setError('Por favor describe tu situación para generar el escrito.');
+        // Validaciones Obligatorias
+        if (!form.nombre_usuario.trim() || !form.rut_usuario.trim() || !form.direccion_usuario.trim()) {
+            setError('Nombre, RUT y Dirección son obligatorios para generar un escrito legal válido.');
             return;
         }
+        if (!checkRUT(form.rut_usuario)) {
+            setError('El formato del RUT no es válido. Ej: 12345678-9');
+            return;
+        }
+
         setLoading(true);
         setError(null);
 
@@ -78,22 +100,63 @@ export default function EscritosModule() {
             <html><head><title>${resultado.tipo_label}</title>
             <style>
                 body { font-family: 'Times New Roman', serif; font-size: 12pt; line-height: 1.8; margin: 3cm 2.5cm; color: #000; }
-                h2 { text-align: center; font-size: 13pt; }
+                h2 { text-align: center; font-size: 13pt; margin-bottom: 20px; }
                 pre { white-space: pre-wrap; font-family: inherit; font-size: 12pt; }
-                .footer { margin-top: 60px; border-top: 1px solid #000; padding-top: 10px; font-size: 10pt; color: #666; }
+                .footer { margin-top: 60px; border-top: 1px solid #000; padding-top: 10px; font-size: 10pt; color: #666; text-align: center; }
             </style></head>
             <body>
                 <pre>${resultado.escrito_formal}</pre>
-                <div class="footer">Generado con Nexo Familia — No constituye asesoría legal profesional. Verifique y adapte con su abogado.</div>
+                <div class="footer">Generado con Nexo Familia — Revise con su abogado.</div>
             </body></html>
         `);
         win.document.close();
         win.print();
     };
 
+    const exportarWord = async () => {
+        try {
+            const paragraphs = resultado.escrito_formal.split('\n').map(line => 
+                new Paragraph({ children: [new TextRun({ text: line, font: "Times New Roman", size: 24 })] })
+            );
+            const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
+            const blob = await Packer.toBlob(doc);
+            saveAs(blob, `Escrito_${tipo.id}.docx`);
+        } catch (err) {
+            alert('Error exportando a Word: ' + err.message);
+        }
+    };
+
+    const exportarPDF = () => {
+        try {
+            const doc = new jsPDF();
+            doc.setFont("times", "normal");
+            doc.setFontSize(12);
+            const splitText = doc.splitTextToSize(resultado.escrito_formal, 170);
+            
+            let y = 30;
+            const pageHeight = doc.internal.pageSize.height;
+            
+            splitText.forEach(line => {
+                if (y + 7 >= pageHeight - 30) {
+                    doc.addPage();
+                    y = 30;
+                }
+                doc.text(line, 20, y);
+                y += 6;
+            });
+            doc.save(`Escrito_${tipo.id}.pdf`);
+        } catch (err) {
+            alert('Error exportando a PDF: ' + err.message);
+        }
+    };
+
+    const editarDatos = () => {
+        setStep('personal'); // Volver atrás a editar y regenerar
+    };
+
     const reset = () => {
         setStep('tipo'); setTipo(null);
-        setForm({ situacion:'',tribunal:'',rit:'',nombre_usuario:'',rut_usuario:'',contraparte:'' });
+        setForm({ situacion:'',tribunal:'',rit:'',contraparte:'',nombre_usuario:'',rut_usuario:'',direccion_usuario:'',telefono_usuario:'',email_usuario:'' });
         setResultado(null); setError(null);
     };
 
@@ -102,7 +165,7 @@ export default function EscritosModule() {
         <div>
             <div className="nf-module-header nf-animate-in">
                 <h1>📝 Escritos Legales</h1>
-                <p>Genera documentos legales listos para presentar en tribunal — equivalentes a los redactados por un abogado.</p>
+                <p>Genera documentos legales listos para presentar en tribunal — redactados inteligentemente a nivel profesional chileno.</p>
             </div>
 
             <div className="nf-card nf-animate-in" style={{ animationDelay: '.05s', marginBottom: 16 }}>
@@ -110,25 +173,16 @@ export default function EscritosModule() {
                     <div className="nf-card-icon purple" style={{ fontSize: 24 }}>⚖️</div>
                     <div>
                         <div className="nf-card-title">Motor de Escritos Profesionales</div>
-                        <div className="nf-card-subtitle">GPT-4o-mini · Leyes chilenas vigentes · Doble salida: Formal + Simple</div>
+                        <div className="nf-card-subtitle">Estructura legal estricta · Leyes actualizadas · Exportación a Word/PDF</div>
                     </div>
                 </div>
-                <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                    gap: 12, marginTop: 8
-                }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 12, marginTop: 8 }}>
                     {TIPOS.map(t => (
-                        <button
-                            key={t.id}
-                            onClick={() => seleccionarTipo(t)}
+                        <button key={t.id} onClick={() => { setTipo(t); setStep('causa'); setError(null); }}
                             style={{
-                                display: 'flex', alignItems: 'center', gap: 14,
-                                padding: '16px 18px',
-                                background: 'var(--nf-bg-secondary)',
-                                border: '1.5px solid var(--nf-border)',
-                                borderRadius: 12, cursor: 'pointer', textAlign: 'left',
-                                transition: 'all 0.18s', color: 'var(--nf-text)',
+                                display: 'flex', alignItems: 'center', gap: 14, padding: '16px 18px',
+                                background: 'var(--nf-bg-secondary)', border: '1.5px solid var(--nf-border)',
+                                borderRadius: 12, cursor: 'pointer', textAlign: 'left', transition: 'all 0.18s', color: 'var(--nf-text)',
                             }}
                             onMouseEnter={e => { e.currentTarget.style.borderColor='var(--nf-primary)'; e.currentTarget.style.background='rgba(139,92,246,0.07)'; }}
                             onMouseLeave={e => { e.currentTarget.style.borderColor='var(--nf-border)'; e.currentTarget.style.background='var(--nf-bg-secondary)'; }}
@@ -142,154 +196,165 @@ export default function EscritosModule() {
                     ))}
                 </div>
             </div>
-
-            <div style={{ background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--nf-text2)' }}>
-                ⚠️ Los escritos generados son orientativos. Se recomienda revisarlos con un abogado antes de presentarlos en tribunal.
-            </div>
         </div>
     );
 
-    // ── STEP 2: Formulario de datos ───────────────────────────────
-    if (step === 'datos') return (
+    // ── STEP 2: Datos de la Causa ─────────────────────────────────
+    if (step === 'causa') return (
         <div>
             <div className="nf-module-header nf-animate-in">
-                <h1>{tipo.icon} {tipo.label}</h1>
-                <p>Completa los datos disponibles. Los campos marcados con * son importantes para la calidad del escrito.</p>
+                <h1>{tipo.icon} Paso 1: Situación Judicial</h1>
+                <p>Describe el contexto de tu caso para armar los fundamentos del escrito.</p>
             </div>
 
             <div className="nf-card nf-animate-in">
                 <div className="nf-form">
-                    {/* Situación — campo crítico */}
                     <div className="nf-field">
                         <label className="nf-label" style={{ color: 'var(--nf-primary)', fontWeight: 700 }}>
                             Describe tu situación * <span style={{ fontWeight: 400, color: 'var(--nf-text2)', fontSize: 12 }}>(más detalle = mejor escrito)</span>
                         </label>
-                        <textarea
-                            className="nf-textarea"
-                            style={{ minHeight: 140 }}
-                            placeholder={`Ej: "Estoy cesante desde enero 2024 porque me despidieron de mi trabajo en construcción. Tengo una deuda de pensión acumulada y no puedo pagar el monto actual de $200.000 mensuales. Tengo 2 hijos menores."`}
-                            value={form.situacion}
-                            onChange={e => setForm(f => ({...f, situacion: e.target.value}))}
+                        <textarea className="nf-textarea" style={{ minHeight: 140 }}
+                            placeholder={`Ej: "Estoy cesante desde enero 2024 porque me despidieron. Tengo una deuda de pensión y no puedo pagar el monto actual. Tengo 2 hijos adicionales de una nueva relación."`}
+                            value={form.situacion} onChange={e => setForm(f => ({...f, situacion: e.target.value}))}
                         />
                     </div>
 
                     <div className="nf-row">
                         <div className="nf-field">
-                            <label className="nf-label">Tribunal (si lo sabes)</label>
-                            <input className="nf-input" placeholder="Ej: Juzgado de Familia de Santiago" value={form.tribunal} onChange={e => setForm(f => ({...f, tribunal: e.target.value}))} />
+                            <label className="nf-label">Tribunal (Opcional)</label>
+                            <input className="nf-input" placeholder="Ej: 1° Juzgado de Familia de Santiago" value={form.tribunal} onChange={e => setForm(f => ({...f, tribunal: e.target.value}))} />
                         </div>
                         <div className="nf-field">
-                            <label className="nf-label">RIT de la causa (si lo tienes)</label>
+                            <label className="nf-label">RIT de la causa (Opcional)</label>
                             <input className="nf-input" placeholder="Ej: C-1234-2024" value={form.rit} onChange={e => setForm(f => ({...f, rit: e.target.value}))} />
                         </div>
                     </div>
-
-                    <div className="nf-row">
-                        <div className="nf-field">
-                            <label className="nf-label">Tu nombre completo</label>
-                            <input className="nf-input" placeholder="Ej: Juan Carlos Pérez González" value={form.nombre_usuario} onChange={e => setForm(f => ({...f, nombre_usuario: e.target.value}))} />
-                        </div>
-                        <div className="nf-field">
-                            <label className="nf-label">Tu RUT</label>
-                            <input className="nf-input" placeholder="Ej: 12.345.678-9" value={form.rut_usuario} onChange={e => setForm(f => ({...f, rut_usuario: e.target.value}))} />
-                        </div>
-                    </div>
-
+                    
                     <div className="nf-field">
-                        <label className="nf-label">Nombre de la contraparte (si lo sabes)</label>
+                        <label className="nf-label">Nombre de la contraparte (Opcional)</label>
                         <input className="nf-input" placeholder="Ej: María González Rojas" value={form.contraparte} onChange={e => setForm(f => ({...f, contraparte: e.target.value}))} />
                     </div>
 
-                    {error && (
-                        <div style={{ color: 'var(--nf-red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 14 }}>
-                            ⚠️ {error}
-                        </div>
-                    )}
+                    {error && <div style={{ color: 'var(--nf-red)', background: 'rgba(239,68,68,.08)', padding: '10px', borderRadius: 8 }}>⚠️ {error}</div>}
 
-                    <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-                        <button className="nf-btn nf-btn-primary" onClick={generar} disabled={loading || !form.situacion.trim()} style={{ opacity: (!form.situacion.trim() || loading) ? 0.5 : 1 }}>
-                            {loading ? '⚖️ Generando escrito profesional... (10-20s)' : '📝 Generar Escrito Legal'}
-                        </button>
-                        <button className="nf-btn nf-btn-ghost" onClick={reset}>← Cambiar tipo</button>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+                        <button className="nf-btn nf-btn-ghost" onClick={reset}>← Volver</button>
+                        <button className="nf-btn nf-btn-primary" onClick={avanzarAPersonal} disabled={!form.situacion.trim()}>Siguiente: Datos Personales →</button>
                     </div>
                 </div>
             </div>
         </div>
     );
 
-    // ── STEP 3: Resultado ─────────────────────────────────────────
-    if (step === 'resultado' && resultado) return (
+    // ── STEP 3: Datos Personales ──────────────────────────────────
+    if (step === 'personal') return (
         <div>
+            <div className="nf-module-header nf-animate-in">
+                <h1>{tipo.icon} Paso 2: Datos Personales</h1>
+                <p>Estos datos se estamparán formalmente en la comparecencia del documento legal.</p>
+            </div>
+
+            <div className="nf-card nf-animate-in">
+                <div className="nf-form">
+                    <div className="nf-row">
+                        <div className="nf-field">
+                            <label className="nf-label">Tu nombre completo *</label>
+                            <input className="nf-input" placeholder="Ej: Juan Carlos Pérez González" value={form.nombre_usuario} onChange={e => setForm(f => ({...f, nombre_usuario: e.target.value}))} />
+                        </div>
+                        <div className="nf-field">
+                            <label className="nf-label">Tu RUT *</label>
+                            <input className="nf-input" placeholder="Ej: 12345678-9" value={form.rut_usuario} onChange={e => setForm(f => ({...f, rut_usuario: e.target.value}))} />
+                        </div>
+                    </div>
+
+                    <div className="nf-field">
+                        <label className="nf-label">Dirección / Domicilio *</label>
+                        <input className="nf-input" placeholder="Ej: Los Leones 123, Depto 44, Providencia, Santiago" value={form.direccion_usuario} onChange={e => setForm(f => ({...f, direccion_usuario: e.target.value}))} />
+                    </div>
+
+                    <div className="nf-row">
+                        <div className="nf-field">
+                            <label className="nf-label">Teléfono (Opcional - Notificaciones)</label>
+                            <input className="nf-input" placeholder="+56 9 1234 5678" value={form.telefono_usuario} onChange={e => setForm(f => ({...f, telefono_usuario: e.target.value}))} />
+                        </div>
+                        <div className="nf-field">
+                            <label className="nf-label">Correo Electrónico (Opcional - Notificaciones)</label>
+                            <input className="nf-input" type="email" placeholder="ejemplo@correo.cl" value={form.email_usuario} onChange={e => setForm(f => ({...f, email_usuario: e.target.value}))} />
+                        </div>
+                    </div>
+
+                    {error && <div style={{ color: 'var(--nf-red)', background: 'rgba(239,68,68,.08)', padding: '10px', borderRadius: 8 }}>⚠️ {error}</div>}
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+                        <button className="nf-btn nf-btn-ghost" onClick={() => setStep('causa')} disabled={loading}>← Atrás</button>
+                        <button className="nf-btn nf-btn-primary" onClick={generar} disabled={loading}>
+                            {loading ? '⚖️ Generando Documento... (Tomará unos segundos)' : (resultado ? '🔄 Actualizar Documento' : '📝 Generar Documento Legal')}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+
+    // ── STEP 4: Resultado Oficial ─────────────────────────────────
+    if (step === 'resultado' && resultado) return (
+        <div className="nf-animate-in">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, flexWrap: 'wrap', gap: 10 }}>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <span className="nf-badge purple">✅ Escrito Generado</span>
+                    <span className="nf-badge purple">✅ Generado con Éxito</span>
                     <span className="nf-badge blue" style={{ fontSize: 11 }}>{resultado.tipo_label}</span>
-                    {resultado.leyes_citadas?.map((ley, i) => (
-                        <span key={i} className="nf-badge green" style={{ fontSize: 10 }}>📜 {ley.split('(')[0].trim()}</span>
-                    ))}
+                    <button className="nf-btn nf-btn-ghost" onClick={editarDatos} style={{ fontSize: 11, padding: '4px 8px' }}>✏️ Editar mis datos</button>
                 </div>
                 <button className="nf-btn nf-btn-ghost" onClick={reset}>← Nuevo escrito</button>
             </div>
 
-            {/* Toggle Formal / Simple */}
+            {/* Toggle Tipo Vista */}
             <div className="nf-type-selector" style={{ marginBottom: 20 }}>
                 <button className={`nf-type-option${showFormal ? ' active' : ''}`} onClick={() => setShowFormal(true)}>
-                    <span>📄</span> Escrito Formal (Para Tribunal)
+                    <span>📄</span> Escrito Legal Formal (Para Tribunal)
                 </button>
                 <button className={`nf-type-option${!showFormal ? ' active' : ''}`} onClick={() => setShowFormal(false)}>
-                    <span>💬</span> Explicación Simple (Para Ti)
+                    <span>💬</span> Explicación Ciudadana (Para Ti)
                 </button>
             </div>
 
             {showFormal ? (
-                <div className="nf-card nf-animate-in">
-                    <div className="nf-card-header" style={{ marginBottom: 16 }}>
-                        <div className="nf-card-icon purple" style={{ fontSize: 22, width: 44, height: 44 }}>⚖️</div>
+                <div className="nf-card">
+                    <div className="nf-card-header" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
                         <div style={{ flex: 1 }}>
                             <div className="nf-card-title">{resultado.tipo_label}</div>
-                            <div className="nf-card-subtitle">Documento listo para imprimir y presentar en tribunal</div>
+                            <div className="nf-card-subtitle">Documento íntegro con la estructura requerida en Chile.</div>
                         </div>
-                        <div style={{ display: 'flex', gap: 8 }}>
-                            <button onClick={copiar} className="nf-btn nf-btn-ghost" style={{ padding: '8px 14px', fontSize: 13 }}>
-                                {copied ? '✅ Copiado' : '📋 Copiar'}
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                            <button onClick={copiar} className="nf-btn nf-btn-ghost" title="Copiar al portapapeles">
+                                {copied ? '✅' : '📋'}
                             </button>
-                            <button onClick={imprimir} className="nf-btn nf-btn-primary" style={{ padding: '8px 14px', fontSize: 13 }}>
-                                🖨️ Imprimir
+                            <button onClick={exportarWord} className="nf-btn nf-btn-primary" style={{ background: '#2B579A', borderColor: '#2B579A' }}>
+                                📄 DOCX
+                            </button>
+                            <button onClick={exportarPDF} className="nf-btn nf-btn-primary" style={{ background: '#E3242B', borderColor: '#E3242B' }}>
+                                📕 PDF
+                            </button>
+                            <button onClick={imprimir} className="nf-btn nf-btn-ghost">
+                                🖨️
                             </button>
                         </div>
                     </div>
 
-                    {/* Escrito en estilo tipográfico legal */}
                     <div style={{
-                        fontFamily: '"Times New Roman", Georgia, serif',
-                        fontSize: 14,
-                        lineHeight: 2,
-                        color: 'var(--nf-text)',
-                        background: 'var(--nf-bg)',
-                        border: '1px solid var(--nf-border)',
-                        borderRadius: 8,
-                        padding: '28px 32px',
-                        whiteSpace: 'pre-wrap',
-                        maxHeight: 520,
-                        overflowY: 'auto',
+                        fontFamily: '"Times New Roman", Georgia, serif', fontSize: 14, lineHeight: 2,
+                        color: '#111', background: '#fcfcfc', border: '1px solid #ddd', borderRadius: 8,
+                        padding: '30px 40px', whiteSpace: 'pre-wrap', maxHeight: 500, overflowY: 'auto',
                     }}>
                         {resultado.escrito_formal}
                     </div>
-
-                    <div style={{ marginTop: 12, fontSize: 12, color: 'var(--nf-text2)', display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <span>📜</span>
-                        Leyes citadas: {resultado.leyes_citadas?.join(' | ')}
-                    </div>
                 </div>
             ) : (
-                <div className="nf-animate-in">
+                <>
                     <div className="nf-card" style={{ marginBottom: 16 }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon blue" style={{ fontSize: 22, width: 44, height: 44 }}>💬</div>
-                            <div>
-                                <div className="nf-card-title">¿Qué significa este escrito?</div>
-                                <div className="nf-card-subtitle">Explicado sin términos legales</div>
-                            </div>
+                            <div className="nf-card-icon blue">💬</div>
+                            <div><div className="nf-card-title">¿Qué significa este escrito?</div><div className="nf-card-subtitle">Resumen sin términos legales</div></div>
                         </div>
                         <p style={{ fontSize: 15, lineHeight: 1.75, color: 'var(--nf-text)', whiteSpace: 'pre-wrap', marginTop: 12 }}>
                             {resultado.explicacion_simple}
@@ -299,24 +364,16 @@ export default function EscritosModule() {
                     {resultado.advertencias?.length > 0 && (
                         <div className="nf-card" style={{ background: 'rgba(251,191,36,0.07)', border: '1px solid rgba(251,191,36,0.25)' }}>
                             <div className="nf-card-header">
-                                <div className="nf-card-icon yellow" style={{ fontSize: 20, width: 40, height: 40 }}>⚠️</div>
-                                <div>
-                                    <div className="nf-card-title">Antes de presentar, verifica:</div>
-                                </div>
+                                <div className="nf-card-icon yellow">⚠️</div>
+                                <div><div className="nf-card-title">Atención antes de presentar:</div></div>
                             </div>
                             <ul style={{ margin: '12px 0 0 20px', padding: 0, fontSize: 14, lineHeight: 1.8, color: 'var(--nf-text)' }}>
-                                {resultado.advertencias.map((a, i) => (
-                                    <li key={i}>{a}</li>
-                                ))}
+                                {resultado.advertencias.map((a, i) => <li key={i}>{a}</li>)}
                             </ul>
                         </div>
                     )}
-                </div>
+                </>
             )}
-
-            <div style={{ marginTop: 16, background: 'rgba(239,68,68,0.05)', border: '1px solid rgba(239,68,68,0.15)', borderRadius: 10, padding: '12px 16px', fontSize: 13, color: 'var(--nf-text2)' }}>
-                🔴 <strong>Importante:</strong> Este escrito es orientativo. Los campos <code>[COMPLETAR]</code> deben ser completados con información real. Se recomienda revisión por un abogado antes de presentar.
-            </div>
         </div>
     );
 

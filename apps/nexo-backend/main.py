@@ -726,6 +726,9 @@ class EscritoRequest(BaseModel):
     rit: str = ""
     nombre_usuario: str = "COMPARECIENTE"
     rut_usuario: str = ""
+    direccion_usuario: str = ""
+    telefono_usuario: str = ""
+    email_usuario: str = ""
     contraparte: str = ""
 
 @app.post("/api/v1/escritos/generar", tags=["Escritos"])
@@ -749,6 +752,14 @@ async def generar_escrito(
     rit_str = f"RIT: {req.rit}" if req.rit else "RIT: A determinarse"
     nombre = req.nombre_usuario or "EL/LA COMPARECIENTE"
     rut = f", RUT {req.rut_usuario}," if req.rut_usuario else ","
+    direccion = f" domiciliado en {req.direccion_usuario}," if req.direccion_usuario else " domiciliado en [COMPLETAR DOMICILIO],"
+    
+    # Datos de contacto para Otrosí
+    contacto = []
+    if req.telefono_usuario: contacto.append(f"teléfono {req.telefono_usuario}")
+    if req.email_usuario: contacto.append(f"correo electrónico {req.email_usuario}")
+    contacto_str = " y ".join(contacto) if contacto else "[COMPLETAR DATOS DE CONTACTO]"
+    
     contraparte = req.contraparte or "la contraparte"
 
     system_prompt = """Eres un abogado senior especialista en Derecho de Familia chileno con 20 años de experiencia litigando en Tribunales de Familia.
@@ -783,6 +794,8 @@ DATOS DEL CASO:
 - {rit_str}
 - Nombre del compareciente: {nombre}
 - RUT: {req.rut_usuario or "No especificado"}
+- Dirección: {req.direccion_usuario or "No especificada"}
+- Contacto: {contacto_str}
 - Contraparte: {contraparte}
 - Situación del usuario: {req.situacion}
 
@@ -790,11 +803,11 @@ LEYES APLICABLES A CITAR: {leyes_texto}
 
 ESTRUCTURA OBLIGATORIA DEL ESCRITO:
 1. ENCABEZADO: "{tribunal_str} / {rit_str}"
-2. COMPARECENCIA: "Yo, {nombre}{rut} domiciliado en [DOMICILIO], en autos caratulados [NOMBRE CAUSA]..."
-3. EXPONGO / EXPONE: Hechos ordenados numéricamente, claros y concisos
+2. COMPARECENCIA: "Yo, {nombre}{rut}{direccion} en autos caratulados [NOMBRE CAUSA]..."
+3. EXPONGO / EXPONE: Hechos ordenados numéricamente, claros y concisos, basados en la "Situación del usuario"
 4. FUNDAMENTOS DE DERECHO: Citar artículos exactos de las leyes {leyes_texto}
 5. POR TANTO: Petición concreta al tribunal
-6. OTROSÍ: Solo si el tipo de escrito lo requiere (acompañar documentos, etc.)
+6. OTROSÍ (Forma de Notificación): Solicitar que las notificaciones se realicen al {contacto_str}. Agrega otros otrosíes si el tipo de escrito lo requiere.
 7. [Ciudad], [fecha] / Firma: "{nombre} / RUT: {req.rut_usuario or '___________'}"
 
 IMPORTANTE: El escrito debe poder presentarse directamente en tribunal. Usa [COMPLETAR] para campos que el usuario debe llenar (domicilio, fechas específicas, montos concretos si no se proporcionaron).
@@ -820,6 +833,13 @@ Genera el escrito ahora:"""
                 "tipoLabel": tipo_label,
                 "tribunal": req.tribunal,
                 "rit": req.rit,
+                "datos_personales": {
+                    "nombre": req.nombre_usuario,
+                    "rut": req.rut_usuario,
+                    "direccion": req.direccion_usuario,
+                    "telefono": req.telefono_usuario,
+                    "email": req.email_usuario
+                },
                 "createdAt": datetime.now(timezone.utc).isoformat(),
                 "preview": resultado.get("escrito_formal", "")[:200],
             })

@@ -13,7 +13,13 @@ export default defineConfig({
         react(),
         VitePWA({
             registerType: 'autoUpdate',
+            injectRegister: 'auto',
             includeAssets: ['favicon.ico', 'apple-touch-icon-180x180.png', 'icon.svg'],
+            workbox: {
+                skipWaiting: true,
+                clientsClaim: true,
+                cleanupOutdatedCaches: true,
+            },
             manifest: {
                 name: 'Nexo Familia',
                 short_name: 'Nexo',
@@ -21,6 +27,7 @@ export default defineConfig({
                 theme_color: '#0f172a',
                 background_color: '#0f172a',
                 display: 'standalone',
+                version: '2.1',
                 icons: [
                     {
                         src: 'pwa-64x64.png',

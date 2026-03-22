@@ -768,23 +768,32 @@ Tu rol es redactar escritos judiciales que:
 1. Sean formalmente correctos según la práctica forense chilena
 2. Usen terminología jurídica precisa pero accesible
 3. Citen leyes chilenas vigentes y aplicables al caso concreto
-4. Tengan la estructura exacta que usan los abogados ante Tribunales de Familia
-5. Sean presentables en tribunal SIN modificaciones
+4. Tengan la estructura EXACTA que exigen los Juzgados de Familia
+5. Sean presentables en tribunal SIN modificaciones importantes
 
 REGLAS ABSOLUTAS:
 - NUNCA incluyas explicaciones al usuario dentro del escrito
 - NUNCA uses frases como "te recomiendo", "deberías", "mi consejo"
 - SIEMPRE usa "S.S." o "S.S.ª" para referirte al juez
 - SIEMPRE usa "SS.MM." para el plural
-- El escrito debe sonar como redactado por un abogado, no por una IA
-- Usa "Por tanto" o "Por estas razones" antes de la petición
+- El escrito debe sonar como redactado por un abogado
+- Usa "Por tanto" o "Por estas razones" antes de la petición principal
 - La petición debe ser CONCRETA y ESPECÍFICA
+
+ESTRUCTURA OBLIGATORIA DEL ESCRITO:
+1. **SUMA**: Precisa y al punto (ej: "SOLICITA REBAJA DE PENSIÓN ALIMENTICIA.")
+2. **INDIVIDUALIZACIÓN**: NUNCA digas "a favor de mi contraparte". Debes decir: "en favor de mi hijo/a [Nombre Completo Hijo/a], representado legalmente por [Nombre de la madre/padre o contraparte]". Si no tienes el nombre del hijo, usa "[NOMBRE DEL HIJO/A]".
+3. **HECHOS**: Si es por cesantía, incluye fechas exactas (o marcadores [Fecha]) de despido y menciona explícitamente que el vínculo terminó "según consta en finiquito que se acompaña".
+4. **DERECHO**: Cita los artículos pertinentes.
+5. **PRUEBA**: Siempre incluye una sección explícita de documentos a acompañar. OBLIGATORIO: Para demandas de familia como rebaja, añade "1. Acta de mediación frustrada (Obligatorio por ley). 2. Certificado de nacimiento. 3. Finiquito de trabajo (si aplica)."
+6. **OTROSÍ DE NOTIFICACIONES**: Menciona la aceptación expresa de notificaciones por correo electrónico.
+7. **OTROSÍ DE PATROCINIO Y PODER**: SIEMPRE añade un Otrosí designando abogado patrocinante y apoderado ("Vengo en designar abogado patrocinante y conferir poder a...").
 
 Responde SOLO con un JSON con exactamente estas claves:
 {
-  "escrito_formal": "texto completo del escrito con formato legal",
+  "escrito_formal": "texto completo del escrito con el formato legal chileno descrito",
   "explicacion_simple": "explicación en 3-4 párrafos cortos para el usuario sin términos legales",
-  "advertencias": ["lista de cosas que el usuario debe verificar o completar"]
+  "advertencias": ["lista de cosas urgentes, EJ: recordar que en Chile los tribunales evalúan activos en AFP o ahorros antes de conceder rebajas solo por cesantía"]
 }"""
 
     prompt = f"""Redacta un escrito judicial de tipo: {tipo_label}
@@ -793,11 +802,11 @@ DATOS DEL CASO:
 - Tribunal: {tribunal_str}
 - {rit_str}
 - Nombre del compareciente: {nombre}
-- RUT: {req.rut_usuario or "No especificado"}
-- Dirección: {req.direccion_usuario or "No especificada"}
+- RUT: {req.rut_usuario or "[COMPLETAR RUT]"}
+- Dirección: {req.direccion_usuario or "[COMPLETAR DIRECCIÓN]"}
 - Contacto: {contacto_str}
-- Contraparte: {contraparte}
-- Situación del usuario: {req.situacion}
+- Representante legal de los menores (contraparte): {contraparte or "[NOMBRE CONTRAPARTE]"}
+- Situación / Hechos del usuario: {req.situacion}
 
 LEYES APLICABLES A CITAR: {leyes_texto}
 

@@ -8,7 +8,7 @@ export default function CopilotoModule() {
         {
             id: 1,
             sender: 'copilot',
-            text: `¡Hola ${currentUser?.displayName || 'estratega'}! Soy **NEXO**, tu copiloto legal IA.\n\nEstoy especializado en Derecho de Familia chileno y puedo orientarte sobre pensiones, embargos, visitas, mediación y más.\n\n¿Qué consulta tienes sobre tu situación judicial?`
+            text: `¡Hola ${currentUser?.displayName || 'estratega'}! Soy **NEXO**, tu Abogado IA 24/7.\n\nEstoy especializado en Derecho de Familia chileno y puedo orientarte sobre pensiones, embargos, visitas, mediación y más.\n\n¿Qué consulta tienes sobre tu situación judicial?`
         }
     ]);
     const [input, setInput] = useState('');
@@ -63,7 +63,7 @@ export default function CopilotoModule() {
                         🤖
                     </div>
                     <div>
-                        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Copiloto Legal AI</h2>
+                        <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Abogado IA 24/7</h2>
                         <div style={{ fontSize: 13, color: iaOnline ? 'var(--nf-green)' : 'var(--nf-red)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
                             <div style={{
                                 width: 8, height: 8,

@@ -3,7 +3,7 @@ import './nexo.css';
 import Sidebar from './components/Sidebar.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx'; // Main landing module, keeping it static for FCP
 import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; 
-import CreditBanner from './components/CreditBanner.jsx';
+import Topbar from './components/Topbar.jsx';
 
 // ── Lazing Loading on Secondary Modules (Optimizes Initial Bundle Size) ──
 const CausaModule = lazy(() => import('./modules/CausaModule.jsx'));
@@ -13,7 +13,6 @@ const GuiasModule = lazy(() => import('./modules/GuiasModule.jsx'));
 const GlosarioModule = lazy(() => import('./modules/GlosarioModule.jsx'));
 const HistorialModule = lazy(() => import('./modules/HistorialModule.jsx'));
 const ScannerModule = lazy(() => import('./modules/ScannerModule.jsx'));
-const RadarModule = lazy(() => import('./modules/RadarModule.jsx'));
 const EstadoModule = lazy(() => import('./modules/EstadoModule.jsx'));
 const CalculadoraModule = lazy(() => import('./modules/CalculadoraModule.jsx'));
 const AuthModule = lazy(() => import('./modules/AuthModule.jsx')); 
@@ -23,11 +22,11 @@ const EscritosModule = lazy(() => import('./modules/EscritosModule.jsx'));
 
 const TABS = [
     { id: 'diagnostico', label: '🧠 Diagnóstico', highlight: true },
-    { id: 'copiloto', label: '🤖 Copiloto IA', highlight: true },
+    { id: 'copiloto', label: '💬 Abogado IA 24/7', highlight: true },
     { id: 'causa', label: '📋 Causa' },
     { id: 'calculadora', label: '🧮 Calculadora Financiera' },
     { id: 'muro', label: '💬 Comunidad' },
-    { id: 'radar', label: '🔔 Radar', highlight: true },
+    { id: 'muro', label: '💬 Comunidad' },
     { id: 'mapa-jueces', label: '🗺️ Mapa de Jueces', highlight: true },
     { id: 'riesgo', label: '🚦 Riesgo' },
     { id: 'estado', label: '📍 Mis Causas' },
@@ -79,7 +78,7 @@ function NexoAppContent() {
             case 'diagnostico': return <DiagnosticoModule onNavigate={navigate} />;
             case 'causa': return <CausaModule />;
             case 'calculadora': return <CalculadoraModule />;
-            case 'radar': return <RadarModule onNavigate={navigate} />;
+            case 'calculadora': return <CalculadoraModule />;
             case 'riesgo': return <RiesgoModule />;
             case 'estado': return <EstadoModule />;
             case 'scanner': return <ScannerModule />;
@@ -106,7 +105,7 @@ function NexoAppContent() {
             <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
             
             <div className="nf-content-wrapper">
-                <CreditBanner />
+                <Topbar onNavigate={navigate} />
                 <main className="nf-main" key={activeTab}>
                     <Suspense fallback={<LoadingFallback />}>
                         {renderModule()}

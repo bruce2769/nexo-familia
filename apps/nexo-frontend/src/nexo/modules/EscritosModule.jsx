@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
 import { jsPDF } from 'jspdf';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../firebase/config.js';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
@@ -15,6 +18,7 @@ const TIPOS = [
 ];
 
 export default function EscritosModule() {
+    const { currentUser } = useAuth();
     const [step, setStep]         = useState('tipo');   // tipo → causa → personal → resultado
     const [tipo, setTipo]         = useState(null);
     const [form, setForm]         = useState({
@@ -63,6 +67,19 @@ export default function EscritosModule() {
 
         setLoading(true);
         setError(null);
+
+        if (currentUser && !currentUser.isAnonymous) {
+            try {
+                const docSnap = await getDoc(doc(db, 'users', currentUser.uid));
+                if (docSnap.exists() && docSnap.data().credits <= 0) {
+                    setError('Créditos insuficientes. Por favor, recarga tu cuenta usando el botón superior para continuar.');
+                    setLoading(false);
+                    return;
+                }
+            } catch (err) {
+                console.warn('No se pudo validar créditos localmente: ', err);
+            }
+        }
 
         const token = localStorage.getItem('nf_token');
         const headers = { 'Content-Type': 'application/json' };
@@ -288,7 +305,7 @@ export default function EscritosModule() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
                         <button className="nf-btn nf-btn-ghost" onClick={() => setStep('causa')} disabled={loading}>← Atrás</button>
                         <button className="nf-btn nf-btn-primary" onClick={generar} disabled={loading}>
-                            {loading ? '⚖️ Generando Documento... (Tomará unos segundos)' : (resultado ? '🔄 Actualizar Documento' : '📝 Generar Documento Legal')}
+                            {loading ? '⚖️ Redactando escrito legal con inteligencia jurídica...' : (resultado ? '🔄 Actualizar Documento' : '📝 Generar Documento Legal')}
                         </button>
                     </div>
                 </div>
@@ -307,6 +324,25 @@ export default function EscritosModule() {
                 </div>
                 <button className="nf-btn nf-btn-ghost" onClick={reset}>← Nuevo escrito</button>
             </div>
+
+            {/* Safe-Exit Prominent Banner */}
+            <div className="nf-card nf-animate-in" style={{ background: 'linear-gradient(135deg, #7638fa, #5417d4)', color: 'white', border: 'none', padding: '24px', marginBottom: 24, boxShadow: '0 8px 16px rgba(118, 56, 250, 0.2)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 16 }}>
+                    <div>
+                        <h3 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>¡Tu escrito está listo para firmar! 🎉</h3>
+                        <p style={{ margin: '8px 0 0 0', opacity: 0.9, fontSize: 15 }}>Descárgalo en PDF ahora. Revisa siempre la información; también quedó guardado en tu historial.</p>
+                    </div>
+                    <div style={{ display: 'flex', gap: 12 }}>
+                        <button onClick={exportarWord} className="nf-btn" style={{ background: 'rgba(255,255,255,0.15)', color: '#fff', border: 'none', fontWeight: 500 }}>
+                            📄 Bajar Word
+                        </button>
+                        <button onClick={exportarPDF} className="nf-btn" style={{ background: '#fff', color: '#7638fa', border: 'none', fontWeight: 700, padding: '12px 24px', fontSize: 16, boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}>
+                            📕 DESCARGAR PDF
+                        </button>
+                    </div>
+                </div>
+            </div>
+
 
             {/* Toggle Tipo Vista */}
             <div className="nf-type-selector" style={{ marginBottom: 20 }}>

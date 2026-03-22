@@ -14,6 +14,18 @@ import time
 from collections import defaultdict
 from datetime import date, datetime, timezone
 import io
+import stripe
+import mercadopago
+
+# Stripe
+stripe.api_key = os.getenv("STRIPE_SECRET_KEY", "sk_test_dummy")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET", "whsec_dummy")
+
+# Mercado Pago
+MERCADOPAGO_ACCESS_TOKEN = os.getenv("MERCADOPAGO_ACCESS_TOKEN", "TEST-dummy")
+mp_sdk = mercadopago.SDK(MERCADOPAGO_ACCESS_TOKEN)
+
+FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
 
 try:
     from reportlab.lib.pagesizes import letter
@@ -783,6 +795,29 @@ async def generar_escrito(
             raise HTTPException(status_code=400, detail="El RUT ingresado no es válido. Verifica el dígito verificador y formato.")
 
     uid = _user.get("uid") if _user else "test-user"
+    user_email = _user.get("email") if _user else req.email_usuario
+    is_anonymous = False
+    if _user and _user.get("firebase", {}).get("sign_in_provider") == "anonymous":
+        is_anonymous = True
+
+    # 1. BARRERA DE PEAJE (Créditos)
+    if FIREBASE_ADMIN_OK and db is not None and uid != "test-user":
+        doc_ref = db.collection("users").document(uid)
+        doc = doc_ref.get()
+        if not doc.exists:
+            # 1 credit for anonymous, 3 for registered
+            initial_credits = 1 if is_anonymous else 3
+            doc_ref.set({"credits": initial_credits, "email": user_email, "isAnonymous": is_anonymous})
+            credits = initial_credits
+        else:
+            data = doc.to_dict()
+            credits = data.get("credits", 0)
+            
+        if credits <= 0:
+            if is_anonymous:
+                raise HTTPException(status_code=403, detail="Has agotado tu documento gratuito. ¡Regístrate gratis para obtener más créditos!")
+            else:
+                raise HTTPException(status_code=403, detail="Créditos insuficientes. Recarga tu cuenta para continuar.")
 
     tipo_label = TIPOS_ESCRITO.get(req.tipo_escrito, req.tipo_escrito)
     leyes = LEYES_REFERENCIA.get(req.tipo_escrito, ["Ley N°14.908", "Ley N°19.968"])
@@ -872,6 +907,18 @@ Genera el escrito ahora:"""
         if req.tipo_escrito == "rebaja_pension":
             if not any("mediación" in str(x).lower() for x in advertencias):
                 advertencias.insert(0, "¡IMPORTANTE! En Chile, para demandar rebaja de alimentos, es REQUISITO DE ADMISIBILIDAD contar con el Certificado de Mediación Frustrada. Si no lo tienes, la demanda será rechazada de plano.")
+                
+        # 2. CONSUMO (Débito)
+        if FIREBASE_ADMIN_OK and db is not None and uid != "test-user":
+            user_ref = db.collection("users").document(uid)
+            user_ref.update({"credits": firestore.Increment(-1)})
+            user_ref.collection("transactions").add({
+                "tipo": "generacion_escrito",
+                "detalle": req.tipo_escrito,
+                "monto": -1,
+                "fecha": firestore.SERVER_TIMESTAMP,
+            })
+            logger.info(f"✅ Se ha descontado 1 crédito al usuario {uid}")
         
     except Exception as e:
         logger.error(f"[Escritos] Error generando escrito: {e}")
@@ -1043,4 +1090,159 @@ def generar_docx_basico(texto_escrito: str, req: EscritoRequest) -> str:
 @app.get("/api/v1/escritos/tipos", tags=["Escritos"])
 async def listar_tipos_escrito():
     """Lista todos los tipos de escritos disponibles."""
+    return TIPOS_ESCRITO
+
+class TopupRequest(BaseModel):
+    userId: str
+    amount: int
+
+@app.post("/api/v1/payments/create-checkout-session", tags=["Payments"])
+async def create_checkout_session(req: TopupRequest):
+    """Crea una sesión de Checkout en Stripe para recargar créditos."""
+    amount = int(req.amount * 500) # CLP 500 por crédito, integral (sin decimales)
+    try:
+        session = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{
+                "price_data": {
+                    "currency": "clp",
+                    "product_data": {"name": f"{req.amount} Créditos Nexo Familia"},
+                    "unit_amount": amount
+                },
+                "quantity": 1
+            }],
+            mode="payment",
+            success_url=f"{FRONTEND_URL}/payment-success?userId={req.userId}&credits={req.amount}",
+            cancel_url=f"{FRONTEND_URL}/payment-cancel",
+            client_reference_id=req.userId,
+            metadata={"credits": str(req.amount)}
+        )
+        return {"url": session.url}
+    except Exception as e:
+        logger.error(f"[Stripe] Error creating checkout session: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/payments/webhook", tags=["Payments"])
+async def stripe_webhook(request: Request):
+    payload = await request.body()
+    sig_header = request.headers.get("stripe-signature")
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload, sig_header, STRIPE_WEBHOOK_SECRET
+        )
+    except ValueError as e:
+        logger.error("Invalid payload")
+        raise HTTPException(status_code=400, detail="Invalid payload")
+    except stripe.error.SignatureVerificationError as e:
+        logger.error("Invalid signature")
+        raise HTTPException(status_code=400, detail="Invalid signature")
+
+    if event["type"] == "checkout.session.completed":
+        session = event["data"]["object"]
+        user_id = session.get("client_reference_id")
+        credits_str = session.get("metadata", {}).get("credits", "0")
+        credits_amount = int(credits_str)
+        if user_id and credits_amount > 0 and FIREBASE_ADMIN_OK and db is not None:
+            user_ref = db.collection("users").document(user_id)
+            user_ref.update({"credits": firestore.Increment(credits_amount)})
+            user_ref.collection("transactions").add({
+                "tipo": "recarga_creditos",
+                "detalle": "Stripe Checkout",
+                "monto": credits_amount,
+                "fecha": firestore.SERVER_TIMESTAMP,
+            })
+            logger.info(f"✅ Stripe Webhook: recargados {credits_amount} créditos a {user_id}")
+
+    return {"received": True}
+
+@app.post("/api/v1/payments/mercadopago/create-preference", tags=["Payments"])
+async def create_mp_preference(req: TopupRequest):
+    """Crea una preferencia de pago en Mercado Pago."""
+    amount = int(req.amount * 500)
+    
+    preference_data = {
+        "items": [
+            {
+                "title": f"Recarga de {req.amount} Créditos - Nexo Familia",
+                "quantity": 1,
+                "currency_id": "CLP",
+                "unit_price": amount
+            }
+        ],
+        "back_urls": {
+            "success": f"{FRONTEND_URL}/payment-success?userId={req.userId}&credits={req.amount}",
+            "failure": f"{FRONTEND_URL}/payment-cancel",
+            "pending": f"{FRONTEND_URL}/payment-pending"
+        },
+        "auto_return": "approved",
+        "external_reference": f"{req.userId}||{req.amount}",
+    }
+
+    try:
+        preference_response = mp_sdk.preference().create(preference_data)
+        preference = preference_response["response"]
+        return {"url": preference["init_point"]}
+    except Exception as e:
+        logger.error(f"[MercadoPago] Error creating preference: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/v1/payments/mercadopago/webhook", tags=["Payments"])
+async def mercadopago_webhook(request: Request):
+    """Webhook para notificaciones de Mercado Pago."""
+    try:
+        payload = await request.json()
+    except Exception:
+        payload = {}
+        
+    action = request.query_params.get("action") or request.query_params.get("topic") or payload.get("action") or payload.get("type")
+    payment_id = request.query_params.get("data.id") or payload.get("data", {}).get("id")
+
+    if (action == "payment.created" or action == "payment") and payment_id:
+        try:
+            payment_info_response = mp_sdk.payment().get(payment_id)
+            payment_info = payment_info_response.get("response", {})
+            
+            if payment_info.get("status") == "approved":
+                ext_ref = payment_info.get("external_reference")
+                if ext_ref:
+                    parts = ext_ref.split("||")
+                    if len(parts) == 2:
+                        user_id = parts[0]
+                        credits_amount = int(parts[1])
+                        
+                        if FIREBASE_ADMIN_OK and db is not None:
+                            user_ref = db.collection("users").document(user_id)
+                            user_ref.update({"credits": firestore.Increment(credits_amount)})
+                            user_ref.collection("transactions").add({
+                                "tipo": "recarga_creditos",
+                                "detalle": "Mercado Pago Webhook",
+                                "monto": credits_amount,
+                                "pago_id": payment_id,
+                                "fecha": firestore.SERVER_TIMESTAMP,
+                            })
+                            logger.info(f"✅ MP Webhook: recargados {credits_amount} créditos a {user_id}")
+        except Exception as e:
+            logger.error(f"[MP Webhook] Error: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    return {"status": "ok"}
+
+
+@app.get("/api/v1/escritos/history/{user_id}", tags=["Escritos"])
+async def historial_escritos(user_id: str):
+    """Devuelve el historial de documentos generados por el usuario."""
+    if not FIREBASE_ADMIN_OK or db is None:
+        return []
+    try:
+        docs = db.collection("escritos").where("userId", "==", user_id).order_by("createdAt", direction=firestore.Query.DESCENDING).limit(50).stream()
+        results = []
+        for d in docs:
+            item = d.to_dict()
+            item["id"] = d.id
+            results.append(item)
+        return results
+    except Exception as e:
+        logger.error(f"Error reading history for {user_id}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 

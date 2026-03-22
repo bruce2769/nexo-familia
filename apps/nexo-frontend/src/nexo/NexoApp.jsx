@@ -3,6 +3,7 @@ import './nexo.css';
 import Sidebar from './components/Sidebar.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx'; // Main landing module, keeping it static for FCP
 import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; 
+import CreditBanner from './components/CreditBanner.jsx';
 
 // ── Lazing Loading on Secondary Modules (Optimizes Initial Bundle Size) ──
 const CausaModule = lazy(() => import('./modules/CausaModule.jsx'));
@@ -105,6 +106,7 @@ function NexoAppContent() {
             <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
             
             <div className="nf-content-wrapper">
+                <CreditBanner />
                 <main className="nf-main" key={activeTab}>
                     <Suspense fallback={<LoadingFallback />}>
                         {renderModule()}

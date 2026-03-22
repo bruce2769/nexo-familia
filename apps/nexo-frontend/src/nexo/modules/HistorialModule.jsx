@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../contexts/AuthContext.jsx';
 
 const LS_KEY = 'nexo-historial';
+const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
 export function saveToHistorial(entry) {
     try {
@@ -15,19 +17,52 @@ const TYPE_META = {
     causa: { icon: '📋', label: 'Causa', color: 'purple' },
     financiero: { icon: '💰', label: 'Financiero', color: 'blue' },
     riesgo: { icon: '🚦', label: 'Riesgo', color: 'green' },
+    escritos: { icon: '📝', label: 'Escritos', color: 'red' },
 };
 
 export default function HistorialModule({ onNavigate }) {
+    const { currentUser } = useAuth();
     const [historial, setHistorial] = useState([]);
     const [filter, setFilter] = useState('all');
     const [expanded, setExpanded] = useState(null);
 
     useEffect(() => {
+        let localH = [];
         try {
-            const h = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-            setHistorial(h);
+            localH = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
         } catch { }
-    }, []);
+        
+        setHistorial(localH);
+
+        if (currentUser && !currentUser.isAnonymous) {
+            fetch(`${BACKEND_URL}/api/v1/escritos/history/${currentUser.uid}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        const backendH = data.map(d => ({
+                            id: d.id,
+                            type: 'escritos',
+                            title: `Documento Generado: ${d.tipoLabel || 'Legal'}`,
+                            date: new Date(d.createdAt).toLocaleString('es-CL'),
+                            summary: d.preview ? `Vista previa: "${d.preview}..."` : 'Documento legal generado vía backend.',
+                            details: {
+                                'Tribunal': d.tribunal,
+                                'RIT': d.rit,
+                                'RUT': d.datos_personales?.rut
+                            },
+                            fromBackend: true
+                        }));
+                        setHistorial(prev => {
+                            // Merge and strictly sort by date descending or just map appending
+                            const combined = [...prev.filter(x => !x.fromBackend), ...backendH];
+                            // Try sorting by pseudo date id or keep backend list on top
+                            return combined.sort((a, b) => b.id > a.id ? 1 : -1); 
+                        });
+                    }
+                })
+                .catch(err => console.error("Could not fetch remote history", err));
+        }
+    }, [currentUser]);
 
     const clearAll = () => {
         if (confirm('¿Eliminar todo el historial?')) {
@@ -37,9 +72,14 @@ export default function HistorialModule({ onNavigate }) {
     };
 
     const deleteItem = (id) => {
+        const item = historial.find(h => h.id === id);
+        if (item && item.fromBackend) {
+            alert("No se pueden eliminar registros oficiales de backend aún.");
+            return;
+        }
         const updated = historial.filter(h => h.id !== id);
         setHistorial(updated);
-        localStorage.setItem(LS_KEY, JSON.stringify(updated));
+        localStorage.setItem(LS_KEY, JSON.stringify(updated.filter(h => !h.fromBackend)));
     };
 
     const filtered = filter === 'all' ? historial : historial.filter(h => h.type === filter);
@@ -55,9 +95,9 @@ export default function HistorialModule({ onNavigate }) {
                 <div className="nf-card nf-animate-in" style={{ textAlign: 'center', padding: 60 }}>
                     <p style={{ fontSize: 48, marginBottom: 16 }}>📭</p>
                     <p style={{ fontSize: 18, fontWeight: 600, marginBottom: 8 }}>Sin consultas aún</p>
-                    <p style={{ color: 'var(--nf-text3)', marginBottom: 24 }}>Cada vez que uses los módulos de Causa, Financiero o Riesgo, tus consultas se guardarán aquí.</p>
-                    <button className="nf-btn nf-btn-primary" onClick={() => onNavigate('causa')}>
-                        📋 Hacer mi primera consulta
+                    <p style={{ color: 'var(--nf-text3)', marginBottom: 24 }}>Aún no tienes escritos generados ni consultas previas. ¡Comienza ahora y simplifica tus trámites legales!</p>
+                    <button className="nf-btn nf-btn-primary" onClick={() => onNavigate('escritos')}>
+                        📋 Generar mi primer escrito
                     </button>
                 </div>
             ) : (

@@ -1,90 +1,33 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ── Helper: usuario autenticado ──────────────────────────
-    function isAuth() {
-      return request.auth != null;
-    }
-
-    // ── Usuarios ─────────────────────────────────────────────
-    // Solo el propio usuario puede leer/escribir su perfil
-    match /usuarios/{uid} {
-      allow read, write: if isAuth() && request.auth.uid == uid;
-
-      // ── Historial del Scanner (Solo Backend escribe) ────────
-      match /scanner_historial/{docId} {
-        allow read: if isAuth() && request.auth.uid == uid;
-        allow write: if false; // Sólo el backend lo escribe usando Admin SDK
+    
+    // Reglas para la colección users
+    match /users/{userId} {
+      // El usuario solo puede leer su propio documento de créditos
+      allow read: if request.auth != null && request.auth.uid == userId;
+      // BLOQUEO TOTAL de escrituras desde el cliente
+      // Solo el backend (FastAPI usnado Admin SDK) puede modificar créditos
+      allow write: if false;
+      
+      // Subcolección de transacciones
+      match /transactions/{transactionId} {
+        allow read: if request.auth != null && request.auth.uid == userId;
+        allow write: if false;
       }
     }
-
-    // ── Diagnósticos ─────────────────────────────────────────
-    // Lectura y escritura solo si userId == uid del token
-    match /diagnosticos/{docId} {
-      allow read, update, delete: if isAuth()
-        && request.auth.uid == resource.data.userId;
-      allow create: if isAuth()
-        && request.auth.uid == request.resource.data.userId;
+    
+    // Reglas para el historial de documentos
+    match /escritos/{docId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if false;
     }
-
-    // ── Radar (causas suscritas) ──────────────────────────────
-    match /radar_causas/{docId} {
-      allow read, update, delete: if isAuth()
-        && request.auth.uid == resource.data.userId;
-      allow create: if isAuth()
-        && request.auth.uid == request.resource.data.userId;
+    
+    // Causas consultadas (opcional dependiendo si guardas local o en la nube)
+    match /causas/{causaId} {
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow write: if false; // Solo se guardan vía backend
     }
-
-    // ── RadarEventos (alertas + movimientos tiempo real) ─────
-    match /radarEventos/{userId}/{document=**} {
-      allow read, write: if isAuth() && request.auth.uid == userId;
-    }
-
-    // ── Estado (causas locales del usuario) ──────────────────
-    match /causas_usuario/{docId} {
-      allow read, update, delete: if isAuth()
-        && request.auth.uid == resource.data.userId;
-      allow create: if isAuth()
-        && request.auth.uid == request.resource.data.userId;
-    }
-
-    // ── Muro comunitario ─────────────────────────────────────
-    // Cualquier usuario autenticado puede leer posts
-    // Solo el autor puede eliminar/editar el suyo
-    match /muro/{postId} {
-      allow read: if isAuth();
-      allow create: if isAuth()
-        && request.auth.uid == request.resource.data.autorUid;
-      allow update, delete: if isAuth()
-        && request.auth.uid == resource.data.autorUid;
-    }
-
-    // Sub-colección de replies del muro
-    match /muro/{postId}/replies/{replyId} {
-      allow read: if isAuth();
-      allow create: if isAuth()
-        && request.auth.uid == request.resource.data.autorUid;
-      allow update, delete: if isAuth()
-        && request.auth.uid == resource.data.autorUid;
-    }
-
-    // ── Caché IA (Solo Backend escribe, lectura pública no aplica) ─────
-    // Admin SDK escribe desde el backend. Nadie lee directamente desde el cliente.
-    match /cache_ia/{hashKey} {
-      allow read, write: if false; // 100% controlado por Admin SDK
-    }
-
-    // ── Límites de uso por usuario ───────────────────────────────────────
-    match /usuarios/{uid}/ia_usage/{fecha} {
-      allow read: if isAuth() && request.auth.uid == uid;
-      allow write: if false; // Solo backend Admin SDK
-    }
-
-    // ── Bloquear todo lo demás por defecto ───────────────────
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
   }
 }

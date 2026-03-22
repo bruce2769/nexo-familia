@@ -26,7 +26,6 @@ const TABS = [
     { id: 'causa', label: '📋 Causa' },
     { id: 'calculadora', label: '🧮 Calculadora Financiera' },
     { id: 'muro', label: '💬 Comunidad' },
-    { id: 'muro', label: '💬 Comunidad' },
     { id: 'mapa-jueces', label: '🗺️ Mapa de Jueces', highlight: true },
     { id: 'riesgo', label: '🚦 Riesgo' },
     { id: 'estado', label: '📍 Mis Causas' },

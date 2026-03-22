@@ -22,7 +22,40 @@ const SORT_OPTIONS = [
 ];
 
 // ── Nombre anónimo basado en uid parcial ──────────────────────────────────────
-const anonNombre = (uid) => uid ? `Usuario ${uid.slice(-4).toUpperCase()}` : 'Anónimo';
+const anonNombre = (uid) => {
+    if (uid === 'nexo-admin') return '🏛️ Abogado Nexo';
+    return uid ? `Usuario ${uid.slice(-4).toUpperCase()}` : 'Anónimo';
+};
+
+const MOCK_POSTS = [
+    {
+        id: 'mock1',
+        category: 'pregunta',
+        autorUid: 'mock-1111',
+        text: "¿Alguien sabe cuánto demora en promedio una retención del 10% de la AFP si el demandado no ha pagado la pensión en 6 meses? Ya hice la solicitud en la ventanilla virtual.",
+        likes: 12,
+        repliesCount: 2,
+        creadoAt: new Date(Date.now() - 172800000), // 2 days ago
+        avatar: 1,
+        mockReplies: [
+            { id: 'r1', autorUid: 'nexo-admin', text: 'Hola. Una vez ingresada la solicitud, el tribunal oficia a la AFP (suele tardar 5-10 días hábiles). Luego la AFP tiene 15 días hábiles para transferir los fondos. Te recomiendo revisar la Oficina Judicial Virtual constatemente.', creadoAt: new Date(Date.now() - 86400000), avatar: 0 },
+            { id: 'r2', autorUid: 'mock-2222', text: 'A mí me tardó como 3 semanas en total desde la liquidación hasta el pago. ¡Paciencia!', creadoAt: new Date(Date.now() - 40000000), avatar: 3 }
+        ]
+    },
+    {
+        id: 'mock2',
+        category: 'experiencia',
+        autorUid: 'mock-3333',
+        text: "Acabo de generar mi primer escrito para rebaja de pensión alimenticia usando Nexo Familia. Me ahorré casi 60 lucas que me cobraba un abogado solo por redactarlo jajaja. ¿Ahora solo lo subo a la Oficina Judicial Virtual con mi Clave Única?",
+        likes: 24,
+        repliesCount: 1,
+        creadoAt: new Date(Date.now() - 36000000), // 10 hours ago
+        avatar: 4,
+        mockReplies: [
+            { id: 'r3', autorUid: 'nexo-admin', text: '¡Exactamente! Solo asegúrate de subirlo como PDF en la sección "Ingreso de Escritos" de tu causa usando tu Clave Única. Recuerda que para rebaja temporal o permanente también debes adjuntar el certificado de mediación frustrada.', creadoAt: new Date(Date.now() - 18000000), avatar: 0 }
+        ]
+    }
+];
 
 export default function MuroModule() {
     const { currentUser } = useAuth();
@@ -136,13 +169,20 @@ export default function MuroModule() {
     }, [replyText, currentUser]);
 
     // ── Filtrar y ordenar posts ───────────────────────────────────────────────
-    let filtered = filter === 'all' ? posts : posts.filter(p => p.category === filter);
+    const combinedPosts = [...MOCK_POSTS, ...posts];
+    let filtered = filter === 'all' ? combinedPosts : combinedPosts.filter(p => p.category === filter);
     if (search) {
         const q = search.toLowerCase();
         filtered = filtered.filter(p => p.text.toLowerCase().includes(q));
     }
     if (sort === 'popular') {
         filtered = [...filtered].sort((a, b) => (b.likes || 0) - (a.likes || 0));
+    } else {
+        filtered = [...filtered].sort((a, b) => {
+            const timeA = a.creadoAt?.toDate ? a.creadoAt.toDate().getTime() : new Date(a.creadoAt).getTime();
+            const timeB = b.creadoAt?.toDate ? b.creadoAt.toDate().getTime() : new Date(b.creadoAt).getTime();
+            return timeB - timeA;
+        });
     }
 
     const catOf = (id) => CATEGORIES.find(c => c.id === id);
@@ -297,7 +337,7 @@ export default function MuroModule() {
                                 )}
 
                                 {/* Replies Thread — se cargan bajo demanda desde Firestore */}
-                                {showReplies && <RepliesThread postId={post.id} />}
+                                {showReplies && <RepliesThread postId={post.id} mockReplies={post.mockReplies} />}
                             </div>
                         );
                     })
@@ -313,10 +353,12 @@ export default function MuroModule() {
 }
 
 // ── Sub-componente: Replies (carga lazy desde Firestore) ──────────────────────
-function RepliesThread({ postId }) {
-    const [replies, setReplies] = useState([]);
+function RepliesThread({ postId, mockReplies }) {
+    const [replies, setReplies] = useState(mockReplies || []);
 
     useEffect(() => {
+        if (mockReplies) return; // Skip Firestore fetching for mock posts
+        
         const q = query(
             collection(db, 'muro', postId, 'replies'),
             orderBy('creadoAt', 'asc')
@@ -325,7 +367,7 @@ function RepliesThread({ postId }) {
             setReplies(snap.docs.map(d => ({ id: d.id, ...d.data() })));
         });
         return () => unsub();
-    }, [postId]);
+    }, [postId, mockReplies]);
 
     const formatTime = (ts) => {
         if (!ts) return 'Justo ahora';
@@ -348,7 +390,7 @@ function RepliesThread({ postId }) {
                     <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
                             <span style={{ fontWeight: 600, fontSize: 13 }}>
-                                Usuario {(r.autorUid || '----').slice(-4).toUpperCase()}
+                                {r.autorUid === 'nexo-admin' ? '🏛️ Abogado Nexo' : `Usuario ${(r.autorUid || '----').slice(-4).toUpperCase()}`}
                             </span>
                             <span style={{ fontSize: 11, color: 'var(--nf-text3)' }}>{formatTime(r.creadoAt)}</span>
                         </div>

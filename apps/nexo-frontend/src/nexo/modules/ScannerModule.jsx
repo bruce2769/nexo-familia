@@ -3,22 +3,12 @@ import React, { useState } from 'react';
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
 export default function ScannerModule() {
-    const [text, setText]     = useState('');
-    const [result, setResult] = useState(null);
+    const [text, setText]       = useState('');
+    const [result, setResult]   = useState(null);
     const [loading, setLoading] = useState(false);
-    const [method, setMethod] = useState('text');
-    const [error, setError]   = useState(null);
-    const [ollamaOk, setOllamaOk] = useState(null); // null=checking, true, false
+    const [method, setMethod]   = useState('text');
+    const [error, setError]     = useState(null);
 
-    // ── Verificar que Ollama/backend esté disponible ──────────────────────────
-    React.useEffect(() => {
-        fetch(`${BACKEND_URL}/api/v1/health/ollama`)
-            .then(r => r.ok ? r.json() : Promise.reject())
-            .then(() => setOllamaOk(true))
-            .catch(() => setOllamaOk(false));
-    }, []);
-
-    // ── Analizar con Ollama via backend ───────────────────────────────────────
     const handleAnalyze = async () => {
         if (!text.trim()) return;
         setLoading(true);
@@ -33,11 +23,7 @@ export default function ScannerModule() {
             });
 
             const data = await res.json();
-
-            if (!res.ok) {
-                throw new Error(data.detail || 'Error desconocido del servidor');
-            }
-
+            if (!res.ok) throw new Error(data.detail || 'Error desconocido del servidor');
             setResult(data);
         } catch (err) {
             setError(err.message);
@@ -52,20 +38,7 @@ export default function ScannerModule() {
         <div>
             <div className="nf-module-header nf-animate-in">
                 <h1>🔍 Escáner de Resoluciones</h1>
-                <p>Pega el texto de una resolución judicial. La IA (Ollama llama3.1) analizará qué significa y qué debes hacer.</p>
-            </div>
-
-            {/* Badge de estado del motor IA */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-                {ollamaOk === null && (
-                    <span className="nf-badge" style={{ background: 'var(--nf-bg2)' }}>⏳ Verificando motor IA...</span>
-                )}
-                {ollamaOk === true && (
-                    <span className="nf-badge green">🟢 Motor IA activo — Ollama llama3.1</span>
-                )}
-                {ollamaOk === false && (
-                    <span className="nf-badge red">🔴 Motor IA offline — ejecuta <code>ollama serve</code></span>
-                )}
+                <p>Pega el texto de una resolución judicial. La IA analizará qué significa y qué debes hacer.</p>
             </div>
 
             {!result ? (
@@ -74,13 +47,10 @@ export default function ScannerModule() {
                         <div className="nf-card-icon blue">🔎</div>
                         <div>
                             <div className="nf-card-title">Analizar Resolución con IA</div>
-                            <div className="nf-card-subtitle">
-                                {ollamaOk ? 'Ollama procesará el texto' : 'Pega el texto de la resolución'}
-                            </div>
+                            <div className="nf-card-subtitle">Motor: GPT-4o Mini · Caché MD5 · Respuesta instantánea si ya fue analizada</div>
                         </div>
                     </div>
 
-                    {/* Method selector */}
                     <div className="nf-type-selector" style={{ marginBottom: 20 }}>
                         <button type="button" className={`nf-type-option${method === 'text' ? ' active' : ''}`} onClick={() => setMethod('text')}>
                             <span>📝</span> Pegar Texto
@@ -110,7 +80,6 @@ export default function ScannerModule() {
                         {error && (
                             <div style={{ color: 'var(--nf-red)', background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.2)', borderRadius: 8, padding: '10px 14px', fontSize: 14 }}>
                                 ⚠️ {error}
-                                {ollamaOk === false && ' — Activa Ollama con: ollama serve'}
                             </div>
                         )}
 
@@ -129,11 +98,14 @@ export default function ScannerModule() {
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                             <span className="nf-badge purple">✅ Análisis completado</span>
-                            {result.fuente === 'ollama' && (
-                                <span className="nf-badge green" style={{ fontSize: 11 }}>🤖 Ollama llama3.1</span>
+                            {result.fuente === 'cache' && (
+                                <span className="nf-badge green" style={{ fontSize: 11 }}>⚡ Caché — Instantáneo</span>
+                            )}
+                            {result.fuente && result.fuente !== 'cache' && result.fuente !== 'fallback' && (
+                                <span className="nf-badge blue" style={{ fontSize: 11 }}>🤖 {result.fuente}</span>
                             )}
                             {result.fuente === 'fallback' && (
-                                <span className="nf-badge yellow" style={{ fontSize: 11 }}>⚠️ Análisis básico (IA no disponible)</span>
+                                <span className="nf-badge yellow" style={{ fontSize: 11 }}>⚠️ Análisis básico</span>
                             )}
                         </div>
                         <button className="nf-btn nf-btn-ghost" onClick={handleReset}>← Nuevo análisis</button>
@@ -182,7 +154,7 @@ export default function ScannerModule() {
 
                     <div className="nf-disclaimer">
                         <span>⚠️</span>
-                        Este análisis fue generado por IA (Ollama llama3.1) de forma local. Para casos complejos, consulte con un abogado.
+                        Este análisis fue generado por IA (GPT-4o Mini). Para casos complejos, consulte con un abogado.
                     </div>
                 </div>
             )}

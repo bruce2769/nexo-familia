@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, Depends, Request
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
@@ -9,9 +9,10 @@ import os
 import json
 import hashlib
 import openai
+import base64
 import time
 from collections import defaultdict
-from datetime import date
+from datetime import date, datetime, timezone
 
 from loguru import logger
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -196,11 +197,9 @@ def _verificar_limite_diario(uid: str) -> bool:
     return True
 
 # ─── Motor IA: OpenAI gpt-4o-mini (ÚNICO motor) ───────────────────────────────
-def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2) -> str:
+def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2, max_tokens: int = 200) -> str:
     """
     Llama a OpenAI gpt-4o-mini con parámetros optimizados.
-    Texto recortado a 800 chars, max_tokens=200, temperatura=0.2.
-    Estimado: ~$0.0005 por request → $10 ≈ 20.000 consultas.
     """
     client = openai.OpenAI(api_key=OPENAI_API_KEY)
     messages = []
@@ -212,8 +211,30 @@ def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2) -> st
         model=OPENAI_MODEL,
         messages=messages,
         temperature=temperatura,
-        max_tokens=200,
+        max_tokens=max_tokens,
     )
+    logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
+    return response.choices[0].message.content or ""
+
+def llamar_openai_vision(base64_image: str) -> str:
+    """Llama a la visión de gpt-4o-mini para extraer transcripción perfecta."""
+    client = openai.OpenAI(api_key=OPENAI_API_KEY)
+    response = client.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Transcribe exactamente todo el texto de la imagen proporcionada de un documento legal. No añadas encabezados ni comentarios extra, solo el texto extraído tal cual."},
+                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                ]
+            }
+        ],
+        max_tokens=2000,
+        temperature=0.1
+    )
+    logger.info(f"[OpenAI Vision OCR] ✅ {response.usage.total_tokens} tokens usados.")
+    return response.choices[0].message.content or ""
     logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
     return response.choices[0].message.content or ""
 
@@ -477,3 +498,180 @@ def obtener_distribucion_materias():
     resultados = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return resultados
+
+# =====================================================================
+#  NUEVO MÓDULO: EXTRACCIÓN ESTRUCTURADA DE CAUSAS 
+# =====================================================================
+
+async def _procesar_causa_unificada(texto_seguro: str, origen: str, uid: str):
+    import hashlib
+    # 1. MD5
+    md5_hash = hashlib.md5(texto_seguro.encode('utf-8')).hexdigest()
+    
+    # 2. Check duplicate in Firestore for this user
+    if db:
+        docs = db.collection('causas').where('userId', '==', uid).where('hashMD5', '==', md5_hash).limit(1).get()
+        if docs:
+            logger.info(f"⚡ [Causas] Cache hit MD5: {md5_hash} para user {uid}")
+            return docs[0].to_dict()
+
+    # 3. Rate Limit IA check
+    if not _verificar_limite_diario(uid):
+        return {"error": "Límite de análisis de IA diario alcanzado. Intenta mañana."}
+    
+    # 4. Prompt
+    system_prompt = (
+        "Eres un software extractor de datos judiciales de Chile. "
+        "Solo debes retornar un objeto JSON, sin agregar texto plano de formato markdown alrededor. "
+        "Si no encuentras un dato, establece la clave en null de manera estricta."
+    )
+    prompt = f"""Analiza el siguiente texto (puede venir de un PDF, imagen o texto ingresado por usuario) y extrae información legal estructurada de Chile.
+
+Responde SOLO en JSON válido.
+
+Si no encuentras un dato, usa null.
+
+Incluye un resumen_simple explicado en lenguaje fácil para cualquier persona (fuera del objeto 'partes').
+
+Debes usar exactamente esta estructura de JSON con estas claves:
+{{
+"rit": "",
+"ruc": "",
+"tribunal": "",
+"juez": "",
+"tipo_causa": "",
+"estado_causa": "",
+"fecha": "",
+"partes": {{
+  "demandante": "",
+  "demandado": ""
+}},
+"resumen_simple": ""
+}}
+
+Texto:
+{texto_seguro}"""
+
+    # 5. Call OpenAI con más tokens permitidos
+    respuesta_raw = llamar_openai(prompt, system=system_prompt, temperatura=0.1, max_tokens=1500)
+    
+    # 6. Parse JSON
+    try:
+        json_match = re.search(r'\{[\s\S]*\}', respuesta_raw)
+        if not json_match:
+            raise ValueError(f"No se encontró JSON válido. Respondió: {respuesta_raw[:200]}")
+        causa_datos = json.loads(json_match.group(0))
+    except Exception as e:
+        logger.error(f"Error parseando JSON de causa: {e}")
+        causa_datos = {
+             "rit": None, "ruc": None, "tribunal": None, "juez": None,
+             "tipo_causa": None, "estado_causa": None, "fecha": None,
+             "partes": {"demandante": None, "demandado": None},
+             "resumen_simple": "Error IA estructurando"
+        }
+    
+    # Validar formato interno de partes por las dudas (a veces la IA mete todo suelto)
+    partes = causa_datos.get("partes")
+    if not isinstance(partes, dict):
+        partes = {"demandante": causa_datos.get("demandante"), "demandado": causa_datos.get("demandado")}
+    
+    # 7. Structure final doc
+    doc_final = {
+        "userId": uid,
+        "rit": causa_datos.get("rit"),
+        "ruc": causa_datos.get("ruc"),
+        "tribunal": causa_datos.get("tribunal"),
+        "juez": causa_datos.get("juez"),
+        "tipoCausa": causa_datos.get("tipo_causa"),
+        "estadoCausa": causa_datos.get("estado_causa"),
+        "fecha": causa_datos.get("fecha"),
+        "partes": partes,
+        "resumenIA": causa_datos.get("resumen_simple"),
+        "hashMD5": md5_hash,
+        "createdAt": datetime.now(timezone.utc).isoformat(),
+        "origen": "pdf"
+    }
+    
+    # 8. Guardar en Firestore
+    if db:
+        try:
+            db.collection('causas').add(doc_final)
+        except Exception as e:
+            logger.error(f"Error guardando causa en FB: {e}")
+
+    return doc_final
+
+@app.post("/api/v1/causas/procesar")
+async def procesar_causa_endpoint(
+    request: Request,
+    archivo: UploadFile = File(None),
+    texto: str = Form(None),
+    usuario: dict = Depends(verify_firebase_token)
+):
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuario no autenticado.")
+    
+    uid = str(usuario.get("uid", ""))
+    
+    texto_extraido = ""
+    origen_doc = "texto"
+
+    if archivo and archivo.filename:
+        contenido = await archivo.read()
+        filename_lower = archivo.filename.lower()
+        if filename_lower.endswith('.pdf'):
+            origen_doc = "pdf"
+            try:
+                doc = fitz.open(stream=contenido, filetype="pdf")
+                for pagina in doc:
+                    texto_extraido += pagina.get_text("text") + "\n"
+                doc.close()
+            except Exception as e:
+                logger.error(f"Error leyendo PDF causa: {e}")
+                raise HTTPException(status_code=400, detail="Error leyendo el archivo PDF.")
+        elif filename_lower.endswith(('.png', '.jpg', '.jpeg', '.webp')):
+            origen_doc = "imagen"
+            try:
+                b64_img = base64.b64encode(contenido).decode('utf-8')
+                texto_extraido = llamar_openai_vision(b64_img)
+            except Exception as e:
+                logger.error(f"Error OCR Visión: {e}")
+                raise HTTPException(status_code=400, detail="Error procesando la imagen por OCR.")
+        else:
+            raise HTTPException(status_code=400, detail="Formato de archivo no soportado.")
+    elif texto:
+        origen_doc = "texto"
+        texto_extraido = texto
+    else:
+        raise HTTPException(status_code=400, detail="Debes enviar un archivo o texto.")
+        
+    texto_limpio = texto_extraido.strip()
+    if len(texto_limpio) < 20:
+        raise HTTPException(status_code=400, detail="El material provisto no contiene suficiente texto legible.")
+        
+    logger.info(f"⚡ [Causas] Procesando - Origen: {origen_doc}")
+    texto_seguro = re.sub(r'[^\w\s.,;:()\-/\'"áéíóúÁÉÍÓÚñÑ]', '', texto_limpio[:25000])
+    
+    resultado = await _procesar_causa_unificada(texto_seguro, origen_doc, uid)
+    
+    logger.info(f"📊 [Result Logs] Tipo input: {origen_doc} | Longitud texto procesado: {len(texto_seguro)}")
+    return resultado
+
+@app.get("/api/v1/causas/mis-causas")
+def mis_causas_endpoint(request: Request, usuario: dict = Depends(verify_firebase_token)):
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Usuario no autenticado.")
+    
+    uid = str(usuario.get("uid", ""))
+    if not db:
+        raise HTTPException(status_code=500, detail="Base de datos no disponible.")
+        
+    try:
+        docs = db.collection("causas").where('userId', '==', uid).get()
+        resultados = [doc.to_dict() for doc in docs]
+        # Ordenar por fecha descendente usando Python para evitar requerir index compuesto en FB
+        resultados.sort(key=lambda x: x.get('createdAt', ''), reverse=True)
+        return resultados
+    except Exception as e:
+        logger.error(f"Error obteniendo causas: {e}")
+        return []

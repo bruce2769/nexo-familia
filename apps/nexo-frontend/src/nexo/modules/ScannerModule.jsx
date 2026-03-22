@@ -7,13 +7,13 @@ export default function ScannerModule() {
     const [file, setFile]       = useState(null);
     const [result, setResult]   = useState(null);
     const [loading, setLoading] = useState(false);
-    const [method, setMethod]   = useState('text');
+    const [method, setMethod]   = useState('pdf'); // pdf, image, text
     const [error, setError]     = useState(null);
 
     const handleAnalyze = async () => {
-        if (method !== 'upload' && !text.trim()) return;
-        if (method === 'upload' && !file) {
-            setError('Por favor selecciona un archivo PDF.');
+        if (method === 'text' && !text.trim()) return;
+        if ((method === 'pdf' || method === 'image') && !file) {
+            setError('Por favor selecciona un archivo.');
             return;
         }
 
@@ -22,24 +22,35 @@ export default function ScannerModule() {
         setResult(null);
 
         try {
-            let res;
-            if (method === 'upload') {
-                const formData = new FormData();
+            const formData = new FormData();
+            if (method === 'pdf' || method === 'image') {
                 formData.append('archivo', file);
-                res = await fetch(`${BACKEND_URL}/api/v1/scanner/subir`, {
-                    method: 'POST',
-                    body: formData,
-                });
             } else {
-                res = await fetch(`${BACKEND_URL}/api/v1/scanner/analizar`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ texto: text }),
-                });
+                formData.append('texto', text);
             }
 
+            console.log("Tipo input:", method);
+            
+            // Simular paso de OCR o texto a logs
+            if (method === 'text') console.log("Texto procesado:", text.substring(0, 100) + "...");
+            else console.log("Texto procesado: [Se procesará en el backend vía OCR o PyMuPDF...]");
+
+            const token = localStorage.getItem("nf_token");
+            const headers = {};
+            if (token) {
+                 headers['Authorization'] = `Bearer ${token}`;
+            }
+
+            const res = await fetch(`${BACKEND_URL}/api/v1/causas/procesar`, {
+                method: 'POST',
+                headers,
+                body: formData,
+            });
+
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Error desconocido del servidor');
+            if (!res.ok) throw new Error(data.detail || data.error || 'Error desconocido del servidor');
+            
+            console.log("JSON extraído:", data);
             setResult(data);
         } catch (err) {
             setError(err.message);
@@ -53,66 +64,62 @@ export default function ScannerModule() {
     return (
         <div>
             <div className="nf-module-header nf-animate-in">
-                <h1>🔍 Escáner de Resoluciones</h1>
-                <p>Pega el texto de una resolución judicial. La IA analizará qué significa y qué debes hacer.</p>
+                <h1>🔍 Escáner Universal de Causas</h1>
+                <p>Extrae y guarda información legal estructurada desde cualquier formato.</p>
             </div>
 
             {!result ? (
                 <div className="nf-card nf-animate-in" style={{ animationDelay: '.08s' }}>
                     <div className="nf-card-header">
-                        <div className="nf-card-icon blue">🔎</div>
+                        <div className="nf-card-icon blue">🧠</div>
                         <div>
-                            <div className="nf-card-title">Analizar Resolución con IA</div>
-                            <div className="nf-card-subtitle">Motor: GPT-4o Mini · Caché MD5 · Respuesta instantánea si ya fue analizada</div>
+                            <div className="nf-card-title">Motor IA de Extracción Estructurada</div>
+                            <div className="nf-card-subtitle">GPT-4 Vision (OCR) · Hash MD5 · Guardado Automático FB</div>
                         </div>
                     </div>
 
                     <div className="nf-type-selector" style={{ marginBottom: 20 }}>
+                        <button type="button" className={`nf-type-option${method === 'pdf' ? ' active' : ''}`} onClick={() => {setMethod('pdf'); setFile(null);}}>
+                            <span>📄</span> Subir PDF
+                        </button>
+                        <button type="button" className={`nf-type-option${method === 'image' ? ' active' : ''}`} onClick={() => {setMethod('image'); setFile(null);}}>
+                            <span>📸</span> Subir Imagen (OCR)
+                        </button>
                         <button type="button" className={`nf-type-option${method === 'text' ? ' active' : ''}`} onClick={() => setMethod('text')}>
                             <span>📝</span> Pegar Texto
-                        </button>
-                        <button type="button" className={`nf-type-option${method === 'describe' ? ' active' : ''}`} onClick={() => setMethod('describe')}>
-                            <span>💬</span> Describir
-                        </button>
-                        <button type="button" className={`nf-type-option${method === 'upload' ? ' active' : ''}`} onClick={() => setMethod('upload')}>
-                            <span>📄</span> Subir PDF
                         </button>
                     </div>
 
                     <div className="nf-form">
-                        {method === 'upload' ? (
+                        {(method === 'pdf' || method === 'image') ? (
                             <div className="nf-field">
-                                <label className="nf-label">Sube tu resolución en PDF</label>
+                                <label className="nf-label">{method === 'pdf' ? 'Sube tu resolución en PDF' : 'Sube o toma una foto del documento'}</label>
                                 <div style={{ border: '2px dashed var(--nf-border)', padding: '30px 20px', textAlign: 'center', borderRadius: 12, background: 'var(--nf-bg-secondary)', cursor: 'pointer', transition: 'all 0.2s' }} className="nf-upload-zone hover-border">
                                     <input 
                                         type="file" 
-                                        accept=".pdf" 
+                                        accept={method === 'pdf' ? ".pdf" : "image/*"} 
+                                        capture={method === 'image' ? "environment" : undefined}
                                         onChange={e => setFile(e.target.files[0])} 
                                         style={{ display: 'none' }} 
-                                        id="pdf-upload"
+                                        id="file-upload"
                                     />
-                                    <label htmlFor="pdf-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%' }}>
-                                        <span style={{ fontSize: 36 }}>{file ? '📄' : '📤'}</span>
+                                    <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%' }}>
+                                        <span style={{ fontSize: 36 }}>{file ? '✅' : (method === 'pdf' ? '📤' : '📷')}</span>
                                         <span style={{ fontWeight: 500, fontSize: 16, color: file ? 'var(--nf-primary)' : 'inherit' }}>
-                                            {file ? file.name : 'Haz clic aquí para seleccionar un PDF'}
+                                            {file ? file.name : (method === 'pdf' ? 'Haz clic aquí para seleccionar un PDF' : 'Haz clic aquí para tomar o subir una foto')}
                                         </span>
-                                        {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>Solo archivos .pdf habilitados</span>}
+                                        {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{method === 'pdf' ? 'Solo archivos .pdf' : 'Soportado: JPG, PNG, WEBP'}</span>}
                                         {file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{(file.size / 1024 / 1024).toFixed(2)} MB — Haz clic para cambiar archivo</span>}
                                     </label>
                                 </div>
                             </div>
                         ) : (
                             <div className="nf-field">
-                                <label className="nf-label">
-                                    {method === 'text' ? 'Texto de la Resolución' : 'Describe qué dice la resolución'}
-                                </label>
+                                <label className="nf-label">Texto del documento judicial</label>
                                 <textarea
                                     className="nf-textarea"
                                     style={{ minHeight: 180 }}
-                                    placeholder={method === 'text'
-                                        ? 'Pega aquí el texto completo de la resolución judicial...\n\nEj: "VISTOS: Se practica liquidación de la deuda de pensiones de alimentos adeudadas..."'
-                                        : 'Describe en tus palabras qué dice el documento que recibiste...\n\nEj: "Me llegó un papel que dice que tengo que pagar una deuda..."'
-                                    }
+                                    placeholder='Pega aquí el texto completo... Ej: "VISTOS: Se practica liquidación de la deuda de pensiones..."'
                                     value={text}
                                     onChange={e => setText(e.target.value)}
                                 />
@@ -128,10 +135,10 @@ export default function ScannerModule() {
                         <button
                             className="nf-btn nf-btn-primary"
                             onClick={handleAnalyze}
-                            disabled={loading || (method === 'upload' ? !file : !text.trim())}
+                            disabled={loading || ((method === 'pdf' || method === 'image') ? !file : !text.trim())}
                             style={{ alignSelf: 'flex-start' }}
                         >
-                            {loading ? '🧠 Analizando con IA...' : '🔍 Analizar Resolución'}
+                            {loading ? '🧠 Extrayendo Datos (puede tomar varios segundos)...' : '⚙️ Estructurar y Guardar en DDBB'}
                         </button>
                     </div>
                 </div>
@@ -139,97 +146,62 @@ export default function ScannerModule() {
                 <div className="nf-result">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
                         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                            <span className="nf-badge purple">✅ Análisis completado</span>
+                            <span className="nf-badge purple">✅ Guardado Estructurado</span>
                             {result.fuente === 'cache' && (
-                                <span className="nf-badge green" style={{ fontSize: 11 }}>⚡ Caché — Instantáneo</span>
+                                <span className="nf-badge green" style={{ fontSize: 11 }}>⚡ MD5 Hit — Evitado Duplicado</span>
                             )}
-                            {result.fuente && result.fuente !== 'cache' && result.fuente !== 'fallback' && (
-                                <span className="nf-badge blue" style={{ fontSize: 11 }}>🤖 {result.fuente}</span>
-                            )}
-                            {result.fuente === 'fallback' && (
-                                <span className="nf-badge yellow" style={{ fontSize: 11 }}>⚠️ Análisis básico</span>
-                            )}
+                            <span className="nf-badge blue" style={{ fontSize: 11, textTransform: 'uppercase' }}>📁 {result.origen}</span>
                         </div>
-                        <button className="nf-btn nf-btn-ghost" onClick={handleReset}>← Nuevo análisis</button>
+                        <button className="nf-btn nf-btn-ghost" onClick={handleReset}>← Subir Otro Documento</button>
                     </div>
 
-                    {/* 1. Resumen Simple */}
                     <div className="nf-card nf-animate-in" style={{ marginBottom: 16 }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon purple" style={{ fontSize: 24, width: 48, height: 48 }}>🧾</div>
+                            <div className="nf-card-icon purple" style={{ fontSize: 24, width: 48, height: 48 }}>⚖️</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Resumen del Documento</div>
-                                <div className="nf-card-subtitle">Qué dice en pocas palabras</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Causa: {result.rit || 'Desconocido'}</div>
+                                <div className="nf-card-subtitle">{result.tribunal || 'Tribunal no listado'}</div>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.resumen_simple}</p>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginTop: 15, padding: 15, background: 'var(--nf-bg-secondary)', borderRadius: 8 }}>
+                            <div><strong style={{ display: 'block', fontSize: 12, color:'var(--nf-text2)', textTransform: 'uppercase' }}>RUC</strong> {result.ruc || 'N/A'}</div>
+                            <div><strong style={{ display: 'block', fontSize: 12, color:'var(--nf-text2)', textTransform: 'uppercase' }}>Tipo de Causa</strong> {result.tipoCausa || 'N/A'}</div>
+                            <div><strong style={{ display: 'block', fontSize: 12, color:'var(--nf-text2)', textTransform: 'uppercase' }}>Estado</strong> {result.estadoCausa || 'N/A'}</div>
+                            <div><strong style={{ display: 'block', fontSize: 12, color:'var(--nf-text2)', textTransform: 'uppercase' }}>Juez titular</strong> {result.juez || 'N/A'}</div>
+                            <div><strong style={{ display: 'block', fontSize: 12, color:'var(--nf-text2)', textTransform: 'uppercase' }}>Fecha Base</strong> {result.fecha || 'N/A'}</div>
+                        </div>
                     </div>
 
-                    {/* 2. Significado */}
-                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.05s' }}>
+                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.1s' }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon yellow" style={{ fontSize: 24, width: 48, height: 48 }}>⚠️</div>
+                            <div className="nf-card-icon yellow" style={{ fontSize: 24, width: 48, height: 48 }}>📄</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Qué Significa Esto</div>
-                                <div className="nf-card-subtitle">En lenguaje simple y directo</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Resumen Simplificado</div>
+                                <div className="nf-card-subtitle">¿Qué significa este documento?</div>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.significado}</p>
+                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.resumenIA || 'Sin resumen disponible.'}</p>
                     </div>
-
-                    {/* 3. Pasos a seguir */}
-                    {result.pasos && result.pasos.length > 0 && (
-                        <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.1s' }}>
-                            <div className="nf-card-header">
-                                <div className="nf-card-icon green" style={{ fontSize: 24, width: 48, height: 48 }}>✅</div>
-                                <div>
-                                    <div className="nf-card-title" style={{ fontSize: 18 }}>Qué Debes Hacer</div>
-                                    <div className="nf-card-subtitle">Paso a paso</div>
-                                </div>
-                            </div>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
-                                {result.pasos.map((p, i) => (
-                                    <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--nf-bg-secondary)', padding: '14px 16px', borderRadius: 8 }}>
-                                        <div style={{ background: 'var(--nf-primary)', color: 'white', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>
-                                            {p.paso || (i+1)}
-                                        </div>
-                                        <div style={{ fontSize: 15, color: 'var(--nf-text)', lineHeight: 1.5, paddingTop: 3 }}>
-                                            {p.desc}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* 4. Lugar */}
+                    
                     <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.15s' }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon blue" style={{ fontSize: 24, width: 48, height: 48 }}>📍</div>
+                            <div className="nf-card-icon green" style={{ fontSize: 24, width: 48, height: 48 }}>👥</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Dónde Hacerlo</div>
-                                <div className="nf-card-subtitle">Institución o lugar correspondiente</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Partes de la Causa</div>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.lugar}</p>
-                    </div>
-
-                    {/* 5. Consejo Practico */}
-                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.2s' }}>
-                        <div className="nf-card-header">
-                            <div className="nf-card-icon orange" style={{ fontSize: 24, width: 48, height: 48 }}>💡</div>
-                            <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Consejo Práctico</div>
-                                <div className="nf-card-subtitle">Tip extra de tu guía legal</div>
+                        <div style={{ display: 'flex', gap: 20, marginTop: 10, flexWrap: 'wrap' }}>
+                            <div style={{ flex: '1 1 200px', padding: 15, background: 'rgba(59,130,246,0.1)', borderRadius: 8, border: '1px solid rgba(59,130,246,0.2)' }}>
+                                <strong style={{ color: '#3b82f6', display: 'block', marginBottom: 5 }}>Demandante:</strong>
+                                <span style={{fontSize: 15}}>{result.partes?.demandante || 'N/A'}</span>
+                            </div>
+                            <div style={{ flex: '1 1 200px', padding: 15, background: 'rgba(239,68,68,0.1)', borderRadius: 8, border: '1px solid rgba(239,68,68,0.2)' }}>
+                                <strong style={{ color: '#ef4444', display: 'block', marginBottom: 5 }}>Demandado:</strong>
+                                <span style={{fontSize: 15}}>{result.partes?.demandado || 'N/A'}</span>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.consejo}</p>
                     </div>
 
-                    <div className="nf-disclaimer">
-                        <span>ℹ️</span>
-                        Esta guía fue generada por IA en base a la resolución provista. Si tu caso es muy complejo, siempre es recomendable confirmar con un abogado de la Corporación de Asistencia Judicial.
-                    </div>
                 </div>
             )}
         </div>

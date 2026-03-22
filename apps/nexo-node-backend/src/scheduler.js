@@ -203,7 +203,7 @@ async function runScrapingCycle() {
  * También ejecuta un ciclo inmediato al arrancar.
  */
 function startScheduler() {
-    const cronSchedule = process.env.CRON_SCHEDULE || '0 */6 * * *';
+    const cronSchedule = process.env.CRON_SCHEDULE || '*/30 * * * *';
     logger.info(`[Scheduler] Configurado con cron: "${cronSchedule}"`);
 
     // Registrar el cron job

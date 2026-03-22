@@ -9,6 +9,23 @@
  */
 const admin = require('firebase-admin');
 const logger = require('../utils/logger');
+const crypto = require('crypto');
+
+async function sendFCMNotification(alerta) {
+    const message = {
+        notification: {
+            title: `Nuevo movimiento RIT ${alerta.rit}`,
+            body: `${alerta.descripcion} - ${alerta.fecha}`
+        },
+        topic: alerta.rit.replace(/[^a-zA-Z0-9-_.~%]+/g, '_') // FCM topic safe name
+    };
+    try {
+        await admin.messaging().send(message);
+        logger.info(`[FCM] Notificación push enviada: ${alerta.rit}`);
+    } catch (err) {
+        logger.error(`[FCM] Error enviando notificación: ${err.message}`);
+    }
+}
 
 // ─── Palabras clave a detectar ────────────────────────────────
 // Organizadas por criticidad (mayor criticidad = mayor prioridad)
@@ -142,8 +159,14 @@ async function guardarEnFirestoreYNotificar(userId, rit, novedades) {
             .collection('movimientos')
             .doc(); // ID automático
 
+        // Generar hash único
+        const hashStr = `${rit}|${mov.fecha}|${mov.descripcion}`;
+        const hash = crypto.createHash('md5').update(hashStr).digest('hex');
+
         batch.set(movRef, {
             ...mov,
+            hash,
+            timestamp: Math.floor(ahora.toMillis() / 1000),
             creadoAt: ahora,
         });
     }
@@ -158,15 +181,25 @@ async function guardarEnFirestoreYNotificar(userId, rit, novedades) {
             .collection('alertas')
             .doc(); // ID automático
 
+        // Generar hash único
+        const hashStr = `${rit}|${alerta.fecha}|${alerta.descripcion}`;
+        const hash = crypto.createHash('md5').update(hashStr).digest('hex');
+
         batch.set(alertaRef, {
             rit,
             fecha: alerta.fecha,
             descripcion: alerta.descripcion,
             nivel: alerta.nivel,
             palabrasClave: alerta.palabrasClave,
+            url_resolucion: alerta.url_resolucion || null,
+            hash,
+            timestamp: Math.floor(ahora.toMillis() / 1000),
             leido: false,
             creadoAt: ahora,
         });
+
+        // Opcional: Notificar push (siempre que no falle el batch)
+        sendFCMNotification(alerta);
     }
 
     // ── 3. Actualizar metadatos de la causa ──────────────────

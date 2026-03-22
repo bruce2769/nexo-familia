@@ -3,8 +3,8 @@ import { useAuth } from '../../contexts/AuthContext.jsx';
 import { db } from '../../firebase/db.js';
 import { collection, onSnapshot, query, where, orderBy, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
-// URL del backend Nexo (ajustar si se despliega en un servidor remoto)
-const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:3001';
+// URL del backend Node.js que procesa el Scraper
+const BACKEND_URL = import.meta.env.VITE_NEXO_NODE_URL || 'http://localhost:3001';
 
 // Tribunales con sus códigos reales del PJUD
 const TRIBUNALES_MAP = [
@@ -30,12 +30,16 @@ export default function RadarModule({ onNavigate }) {
 
     // ── Verificar si el backend está corriendo ────────────────
     useEffect(() => {
-        fetch(`${BACKEND_URL}/health`)
-            .then(r => r.json())
+        // En Express/Node el endpoint de health root es / o /api/health
+        fetch(`${BACKEND_URL}/health`).then(r => r.ok ? r.json() : Promise.reject())
             .then(() => setBackendConectado(true))
             .catch(() => {
-                setBackendConectado(false);
-                setModoDemo(true);
+                fetch(`${BACKEND_URL.replace('/api','')}/health`).then(r => r.ok ? r.json() : Promise.reject())
+                .then(() => setBackendConectado(true))
+                .catch(() => {
+                    setBackendConectado(false);
+                    setModoDemo(true);
+                })
             });
     }, []);
 
@@ -101,9 +105,10 @@ export default function RadarModule({ onNavigate }) {
         }
 
         try {
-            // Llamar al backend real con el token de Firebase
+            // Llamar al backend de Node.js con el token de Firebase
             const token = await currentUser.getIdToken();
-            const res = await fetch(`${BACKEND_URL}/api/radar/subscribe`, {
+            const url = BACKEND_URL.endsWith('/api') ? `${BACKEND_URL}/radar/subscribe` : `${BACKEND_URL}/api/radar/subscribe`;
+            const res = await fetch(url, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -239,9 +244,20 @@ export default function RadarModule({ onNavigate }) {
     // ── PANTALLA: Dashboard del Radar ─────────────────────────
     return (
         <div className="nf-animate-in">
-            <div className="nf-module-header">
-                <h1>📡 Radar Activo: {causa.rit}</h1>
-                <p>{causa.tribunal} · Monitoreo {backendConectado ? 'Real' : 'Demo'} en curso</p>
+            <div className="nf-module-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+                <div>
+                    <h1>📡 Radar Activo: {causa.rit}</h1>
+                    <p>{causa.tribunal} · Monitoreo {backendConectado ? 'Real' : 'Demo'} en curso</p>
+                </div>
+                <div>
+                    <button 
+                        className="nf-btn nf-btn-secondary" 
+                        onClick={() => window.open(`${BACKEND_URL.replace('/api', '')}/api/radar/pdf?rit=${causa.rit}`, '_blank')}
+                        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+                    >
+                        📄 Descargar Historial PDF
+                    </button>
+                </div>
             </div>
 
             {/* Status cards */}
@@ -282,6 +298,16 @@ export default function RadarModule({ onNavigate }) {
                         </div>
                     </div>
                     <p style={{ color: 'var(--nf-text2)', margin: '12px 0' }}>{alerta.descripcion}</p>
+                    
+                    {/* ENLACE A DOCUMENTO SI EXISTE */}
+                    {alerta.url_resolucion && (
+                        <div style={{ marginBottom: 12 }}>
+                            <a href={alerta.url_resolucion} target="_blank" rel="noreferrer" className="nf-badge blue" style={{ textDecoration: 'none' }}>
+                                📄 Ver Documento Original en PJUD
+                            </a>
+                        </div>
+                    )}
+
                     {alerta.palabrasClave?.length > 0 && (
                         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
                             {alerta.palabrasClave.map(kw => (
@@ -326,7 +352,12 @@ export default function RadarModule({ onNavigate }) {
                                         <div style={{ fontWeight: 600, color: nivelColor(m.nivel) }}>{m.descripcion}</div>
                                         <div style={{ fontSize: 12, color: 'var(--nf-text3)' }}>{m.fecha}</div>
                                     </div>
-                                    {m.tipo && <div style={{ color: 'var(--nf-text3)', fontSize: 12 }}>{m.tipo}</div>}
+                                    {m.tipo && <div style={{ color: 'var(--nf-text3)', fontSize: 12, marginBottom: 4 }}>{m.tipo}</div>}
+                                    {m.url_resolucion && (
+                                        <a href={m.url_resolucion} target="_blank" rel="noreferrer" style={{ fontSize: 12, color: 'var(--nf-primary)', textDecoration: 'underline' }}>
+                                            Ver documento asociado
+                                        </a>
+                                    )}
                                 </div>
                             </div>
                         ))}

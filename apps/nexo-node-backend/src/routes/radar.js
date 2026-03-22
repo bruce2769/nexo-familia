@@ -6,6 +6,7 @@
  */
 const express = require('express');
 const admin = require('firebase-admin');
+const PDFDocument = require('pdfkit');
 const { runManualCycle, getStatus } = require('../scheduler');
 const logger = require('../utils/logger');
 
@@ -204,6 +205,59 @@ router.post('/trigger-scan', requireAuth, async (req, res) => {
 // ──────────────────────────────────────────────────────────────
 router.get('/scheduler-status', requireAuth, (req, res) => {
     res.json(getStatus());
+});
+
+// ──────────────────────────────────────────────────────────────
+// GET /api/radar/pdf?rit=C-1234-2023
+// Genera un PDF resumen descargable con los movimientos 
+// ──────────────────────────────────────────────────────────────
+router.get('/pdf', async (req, res) => {
+    const { rit } = req.query;
+    if (!rit) {
+        return res.status(400).json({ error: 'RIT requerido' });
+    }
+
+    try {
+        const db = admin.firestore();
+        // Buscar movimientos guardados por cualquier usuario (el consolidado global de radar_judicial)
+        // En nuestro diseño multitenant, lo ideal es buscar dentro del usuario de la sesión, pero 
+        // para efectos de exportación general, consultamos con un group-query o la primera suscripción válida.
+        // Simulando radar_judicial genérico
+        
+        const causasSnap = await db.collectionGroup('causas').where('rit', '==', rit.toUpperCase()).limit(1).get();
+        if (causasSnap.empty) {
+            return res.status(404).json({ error: `No hay registros para el RIT ${rit}` });
+        }
+
+        const causaRef = causasSnap.docs[0].ref;
+        const movsSnap = await causaRef.collection('movimientos').orderBy('creadoAt', 'desc').get();
+
+        const doc = new PDFDocument();
+        res.setHeader('Content-disposition', `attachment; filename="${rit}_resumen.pdf"`);
+        res.setHeader('Content-type', 'application/pdf');
+        
+        doc.pipe(res);
+        doc.fontSize(18).text(`Resumen de Movimientos - RIT ${rit}`, { underline: true });
+        doc.moveDown();
+
+        if (movsSnap.empty) {
+            doc.fontSize(12).text('Aún no existen movimientos registrados para esta causa.');
+        } else {
+            movsSnap.docs.forEach(d => {
+                const m = d.data();
+                doc.moveDown().fontSize(12).text(`Fecha: ${m.fecha} | Movimiento: ${m.descripcion || m.movimiento}`);
+                if (m.tipo) doc.fontSize(10).fillColor('gray').text(`Tipo: ${m.tipo}`).fillColor('black');
+                if (m.url_resolucion) {
+                    doc.fontSize(10).fillColor('blue').text(`Documento original`, { link: m.url_resolucion, underline: true }).fillColor('black');
+                }
+            });
+        }
+        
+        doc.end();
+    } catch (err) {
+        logger.error('[API PDF] Error:', err);
+        res.status(500).json({ error: 'Error generando PDF', details: err.message });
+    }
 });
 
 module.exports = router;

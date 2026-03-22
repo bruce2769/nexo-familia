@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts';
 import { Scale, Clock, TrendingUp } from 'lucide-react';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
@@ -304,11 +304,16 @@ export default function MapaJuecesModule() {
                 
                 // Usar datos demo si falla la conexión a la base de datos real
                 setDatosVelocidad([
-                    { tribunal: 'Santiago', meses: 5.2 },
-                    { tribunal: 'San Miguel', meses: 4.8 },
-                    { tribunal: 'Valparaíso', meses: 6.1 },
-                    { tribunal: 'Concepción', meses: 5.8 }
-                ]);
+                    { tribunal: 'Stgo', meses: 5.2 },
+                    { tribunal: 'S.Miguel', meses: 4.8 },
+                    { tribunal: 'Valpo', meses: 6.1 },
+                    { tribunal: 'Viña', meses: 6.0 },
+                    { tribunal: 'Conce', meses: 5.8 },
+                    { tribunal: 'Antofa', meses: 4.3 },
+                    { tribunal: 'La Serena', meses: 5.1 },
+                    { tribunal: 'Temuco', meses: 6.8 },
+                    { tribunal: 'P. Montt', meses: 7.1 },
+                ].sort((a,b) => a.meses - b.meses));
                 setDatosEstacionalidad([
                     { mes: 'Ene', sentencias: 1240 },
                     { mes: 'Feb', sentencias: 850 },
@@ -467,10 +472,11 @@ export default function MapaJuecesModule() {
                                     <div style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height="100%">
                                             <PieChart>
-                                                <Pie data={datosMaterias} cx="50%" cy="50%" innerRadius={50} outerRadius={90} paddingAngle={2} dataKey="valor">
+                                                <Pie data={datosMaterias} nameKey="materia" cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={2} dataKey="valor" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
                                                     {datosMaterias.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORES[index % COLORES.length]} />)}
                                                 </Pie>
                                                 <Tooltip formatter={(value) => [`${value} causas`, 'Volumen']} contentStyle={{ background: '#1e1b4b', border: '1px solid #312e81', borderRadius: 8, color: '#fff' }} itemStyle={{ color: '#fff' }} />
+                                                <Legend verticalAlign="bottom" height={30} wrapperStyle={{ fontSize: '11px', color: '#cbd5e1' }} />
                                             </PieChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -479,12 +485,12 @@ export default function MapaJuecesModule() {
                                     <h3 style={{ fontSize: 16, marginBottom: 16 }}>Tiempos Promedio Históricos</h3>
                                     <div style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={datosVelocidad} layout="vertical" margin={{ left: 0 }}>
+                                            <BarChart data={datosVelocidad} layout="vertical" margin={{ left: 10, right: 30 }}>
                                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#334155" />
                                                 <XAxis type="number" stroke="#94a3b8" />
-                                                <YAxis dataKey="tribunal" type="category" width={80} stroke="#94a3b8" style={{ fontSize: 11 }} />
+                                                <YAxis dataKey="tribunal" type="category" width={60} stroke="#94a3b8" style={{ fontSize: 11 }} />
                                                 <Tooltip cursor={{ fill: '#334155' }} contentStyle={{ background: '#1e1b4b', border: '1px solid #312e81', borderRadius: 8, color: '#fff' }} itemStyle={{ color: '#fff' }} />
-                                                <Bar dataKey="meses" fill="#3b82f6" radius={[0, 4, 4, 0]} />
+                                                <Bar dataKey="meses" fill="#3b82f6" radius={[0, 4, 4, 0]} label={{ position: 'right', fill: '#cbd5e1', fontSize: 11, formatter: (val) => `${val}m` }} />
                                             </BarChart>
                                         </ResponsiveContainer>
                                     </div>
@@ -493,12 +499,12 @@ export default function MapaJuecesModule() {
                                     <h3 style={{ fontSize: 16, marginBottom: 16 }}>Estacionalidad Nacional</h3>
                                     <div style={{ height: 260 }}>
                                         <ResponsiveContainer width="100%" height="100%">
-                                            <LineChart data={datosEstacionalidad}>
+                                            <LineChart data={datosEstacionalidad} margin={{ top: 20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#334155" />
                                                 <XAxis dataKey="mes" stroke="#94a3b8" />
                                                 <YAxis stroke="#94a3b8" />
                                                 <Tooltip contentStyle={{ background: '#1e1b4b', border: '1px solid #312e81', borderRadius: 8, color: '#fff' }} itemStyle={{ color: '#fff' }} />
-                                                <Line type="monotone" dataKey="sentencias" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }} />
+                                                <Line type="monotone" dataKey="sentencias" stroke="#10b981" strokeWidth={3} dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }} label={{ position: 'top', fill: '#10b981', fontSize: 11, fontWeight: 'bold' }} />
                                             </LineChart>
                                         </ResponsiveContainer>
                                     </div>

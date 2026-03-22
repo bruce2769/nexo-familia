@@ -178,6 +178,7 @@ async function scrapeMovimientosPlaywright({ rit, codigoCorte, tribunal }) {
                     tipo: celdas[1]?.textContent?.trim() || '',
                     descripcion: celdas[2]?.textContent?.trim() || '',
                     folio: celdas[3]?.textContent?.trim() || null,
+                    url_resolucion: fila.querySelector('a')?.href || null,
                 };
             }).filter(m => m.fecha || m.descripcion);
         });

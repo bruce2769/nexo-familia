@@ -203,42 +203,48 @@ def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2, max_t
     """
     Llama a OpenAI gpt-4o-mini con parámetros optimizados.
     """
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        messages = []
+        if system:
+            messages.append({"role": "system", "content": system})
+        messages.append({"role": "user", "content": prompt})
 
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=messages,
-        temperature=temperatura,
-        max_tokens=max_tokens,
-    )
-    logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
-    return response.choices[0].message.content or ""
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=messages,
+            temperature=temperatura,
+            max_tokens=max_tokens,
+        )
+        logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
+        return response.choices[0].message.content or ""
+    except Exception as e:
+        logger.error(f"[OpenAI] Error: {e}")
+        return "{}"
 
 def llamar_openai_vision(base64_image: str) -> str:
     """Llama a la visión de gpt-4o-mini para extraer transcripción perfecta."""
-    client = openai.OpenAI(api_key=OPENAI_API_KEY)
-    response = client.chat.completions.create(
-        model=OPENAI_MODEL,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": "Transcribe exactamente todo el texto de la imagen proporcionada de un documento legal. No añadas encabezados ni comentarios extra, solo el texto extraído tal cual."},
-                    {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
-                ]
-            }
-        ],
-        max_tokens=2000,
-        temperature=0.1
-    )
-    logger.info(f"[OpenAI Vision OCR] ✅ {response.usage.total_tokens} tokens usados.")
-    return response.choices[0].message.content or ""
-    logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
-    return response.choices[0].message.content or ""
+    try:
+        client = openai.OpenAI(api_key=OPENAI_API_KEY)
+        response = client.chat.completions.create(
+            model=OPENAI_MODEL,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "Transcribe exactamente todo el texto de la imagen proporcionada de un documento legal. No añadas encabezados ni comentarios extra, solo el texto extraído tal cual."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{base64_image}"}}
+                    ]
+                }
+            ],
+            max_tokens=2000,
+            temperature=0.1
+        )
+        logger.info(f"[OpenAI Vision OCR] ✅ {response.usage.total_tokens} tokens usados.")
+        return response.choices[0].message.content or ""
+    except Exception as e:
+        logger.error(f"[OpenAI Vision OCR] Error: {e}")
+        return ""
 
 # ─── Modelos Pydantic ──────────────────────────────────────────────────────────
 class CopilotoRequest(BaseModel):
@@ -512,10 +518,13 @@ async def _procesar_causa_unificada(texto_seguro: str, origen: str, uid: str):
     
     # 2. Check duplicate in Firestore for this user
     if db:
-        docs = db.collection('causas').where('userId', '==', uid).where('hashMD5', '==', md5_hash).limit(1).get()
-        if docs:
-            logger.info(f"⚡ [Causas] Cache hit MD5: {md5_hash} para user {uid}")
-            return docs[0].to_dict()
+        try:
+            docs = db.collection('causas').where('userId', '==', uid).where('hashMD5', '==', md5_hash).limit(1).get()
+            if docs:
+                logger.info(f"⚡ [Causas] Cache hit MD5: {md5_hash} para user {uid}")
+                return docs[0].to_dict()
+        except Exception as db_err:
+            logger.error(f"⚠️ Error leyendo caché MD5 de Firebase: {db_err}")
 
     # 3. Rate Limit IA check
     if not _verificar_limite_diario(uid):

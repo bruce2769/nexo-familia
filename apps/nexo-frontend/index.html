@@ -1,6 +1,5 @@
 <!doctype html>
 <html lang="es">
-
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -13,36 +12,30 @@
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon-180x180.png">
   <title>Nexo Familia</title>
-  <script type="module" crossorigin src="/assets/index-CDthLfaf.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-vzAtrFE0.css">
-<link rel="manifest" href="/manifest.webmanifest"><script id="vite-plugin-pwa:register-sw" src="/registerSW.js"></script></head>
-
+  <script type="module" src="/src/main.jsx"></script>
+</head>
 <body>
   <noscript>Necesitas habilitar JavaScript para usar Nexo Familia.</noscript>
   <div id="root">
     <div id="initial-loader"
       style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#0f0d1a;z-index:9999;">
       <div style="text-align:center;">
-        <div style="font-family:Outfit,sans-serif;font-size:28px;font-weight:700;color:#a78bfa;margin-bottom:8px;">⚖️
-          Nexo Familia</div>
-        <div
-          style="width:40px;height:40px;border-radius:50%;border:3px solid #1e1b2e;border-top-color:#a78bfa;animation:spin .8s linear infinite;margin:0 auto 12px;">
+        <div style="font-family:Outfit,sans-serif;font-size:28px;font-weight:700;color:#a78bfa;margin-bottom:8px;">
+          ⚖️ Nexo Familia
         </div>
-        <div style="font-family:Outfit,sans-serif;color:#6b6889;font-size:13px;">Cargando plataforma…</div>
+        <div style="width:40px;height:40px;border-radius:50%;border:3px solid #1e1b2e;border-top-color:#a78bfa;animation:spin .8s linear infinite;margin:0 auto 12px;">
+        </div>
+        <div style="font-family:Outfit,sans-serif;color:#6b6889;font-size:13px;">Cargando plataforma...</div>
       </div>
     </div>
     <style>
       @keyframes spin {
-        to {
-          transform: rotate(360deg);
-        }
+        to { transform: rotate(360deg); }
       }
-
       #root:has(> :not(#initial-loader)) #initial-loader {
         display: none;
       }
     </style>
   </div>
 </body>
-
 </html>

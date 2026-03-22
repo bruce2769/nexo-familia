@@ -1,24 +1,24 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import './nexo.css';
-// import Navbar from './components/Navbar.jsx';
-// import Footer from './components/Footer.jsx';
 import Sidebar from './components/Sidebar.jsx';
-import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
-import CausaModule from './modules/CausaModule.jsx';
-import RiesgoModule from './modules/RiesgoModule.jsx';
-import MuroModule from './modules/MuroModule.jsx';
-import GuiasModule from './modules/GuiasModule.jsx';
-import GlosarioModule from './modules/GlosarioModule.jsx';
-import HistorialModule from './modules/HistorialModule.jsx';
-import ScannerModule from './modules/ScannerModule.jsx';
-import RadarModule from './modules/RadarModule.jsx';
-import EstadoModule from './modules/EstadoModule.jsx';
-import CalculadoraModule from './modules/CalculadoraModule.jsx';
-import AuthModule from './modules/AuthModule.jsx'; // Nuevo módulo de login
-import CopilotoModule from './modules/CopilotoModule.jsx'; // Nuevo módulo copiloto offline
-import MapaJuecesModule from './modules/MapaJuecesModule.jsx'; // Pilar 3: ML de Sentencias
-import EscritosModule from './modules/EscritosModule.jsx'; // Generador de escritos legales
-import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; // Nuevo contexto
+import DiagnosticoModule from './modules/DiagnosticoModule.jsx'; // Main landing module, keeping it static for FCP
+import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; 
+
+// ── Lazing Loading on Secondary Modules (Optimizes Initial Bundle Size) ──
+const CausaModule = lazy(() => import('./modules/CausaModule.jsx'));
+const RiesgoModule = lazy(() => import('./modules/RiesgoModule.jsx'));
+const MuroModule = lazy(() => import('./modules/MuroModule.jsx'));
+const GuiasModule = lazy(() => import('./modules/GuiasModule.jsx'));
+const GlosarioModule = lazy(() => import('./modules/GlosarioModule.jsx'));
+const HistorialModule = lazy(() => import('./modules/HistorialModule.jsx'));
+const ScannerModule = lazy(() => import('./modules/ScannerModule.jsx'));
+const RadarModule = lazy(() => import('./modules/RadarModule.jsx'));
+const EstadoModule = lazy(() => import('./modules/EstadoModule.jsx'));
+const CalculadoraModule = lazy(() => import('./modules/CalculadoraModule.jsx'));
+const AuthModule = lazy(() => import('./modules/AuthModule.jsx')); 
+const CopilotoModule = lazy(() => import('./modules/CopilotoModule.jsx')); 
+const MapaJuecesModule = lazy(() => import('./modules/MapaJuecesModule.jsx')); 
+const EscritosModule = lazy(() => import('./modules/EscritosModule.jsx')); 
 
 const TABS = [
     { id: 'diagnostico', label: '🧠 Diagnóstico', highlight: true },
@@ -66,6 +66,13 @@ function NexoAppContent() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
+    const LoadingFallback = () => (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
+            <div style={{ width: 40, height: 40, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'nf-spin 1s linear infinite', margin: '0 auto 16px' }} />
+            Cargando módulo...
+        </div>
+    );
+
     const renderModule = () => {
         switch (activeTab) {
             case 'diagnostico': return <DiagnosticoModule onNavigate={navigate} />;
@@ -99,7 +106,9 @@ function NexoAppContent() {
             
             <div className="nf-content-wrapper">
                 <main className="nf-main" key={activeTab}>
-                    {renderModule()}
+                    <Suspense fallback={<LoadingFallback />}>
+                        {renderModule()}
+                    </Suspense>
                 </main>
             </div>
 

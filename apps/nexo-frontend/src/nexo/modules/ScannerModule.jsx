@@ -153,50 +153,82 @@ export default function ScannerModule() {
                         <button className="nf-btn nf-btn-ghost" onClick={handleReset}>← Nuevo análisis</button>
                     </div>
 
-                    {/* Tipo + Resumen */}
+                    {/* 1. Resumen Simple */}
                     <div className="nf-card nf-animate-in" style={{ marginBottom: 16 }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon purple" style={{ fontSize: 28, width: 56, height: 56 }}>⚖️</div>
+                            <div className="nf-card-icon purple" style={{ fontSize: 24, width: 48, height: 48 }}>🧾</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 20 }}>{result.tipo}</div>
-                                <span className={`nf-badge ${result.riesgo === 'alto' ? 'red' : result.riesgo === 'medio' ? 'yellow' : 'green'}`}>
-                                    Riesgo {result.riesgo === 'alto' ? 'Alto' : result.riesgo === 'medio' ? 'Medio' : 'Bajo'}
-                                </span>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Resumen del Documento</div>
+                                <div className="nf-card-subtitle">Qué dice en pocas palabras</div>
                             </div>
                         </div>
-                        <p style={{ color: 'var(--nf-text2)', fontSize: 15, lineHeight: 1.7 }}>{result.resumen}</p>
+                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.resumen_simple}</p>
                     </div>
 
-                    {/* Puntos Clave */}
-                    {result.puntosClave?.length > 0 && (
-                        <div className="nf-result-grid" style={{ marginBottom: 16 }}>
-                            {result.puntosClave.map((p, i) => (
-                                <div className="nf-result-item nf-animate-in" key={i} style={{ animationDelay: `${i * 0.08}s` }}>
-                                    <div className="label"><span>{p.icon}</span> {p.label}</div>
-                                    <div className="value">{p.value}</div>
+                    {/* 2. Significado */}
+                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.05s' }}>
+                        <div className="nf-card-header">
+                            <div className="nf-card-icon yellow" style={{ fontSize: 24, width: 48, height: 48 }}>⚠️</div>
+                            <div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Qué Significa Esto</div>
+                                <div className="nf-card-subtitle">En lenguaje simple y directo</div>
+                            </div>
+                        </div>
+                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.significado}</p>
+                    </div>
+
+                    {/* 3. Pasos a seguir */}
+                    {result.pasos && result.pasos.length > 0 && (
+                        <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.1s' }}>
+                            <div className="nf-card-header">
+                                <div className="nf-card-icon green" style={{ fontSize: 24, width: 48, height: 48 }}>✅</div>
+                                <div>
+                                    <div className="nf-card-title" style={{ fontSize: 18 }}>Qué Debes Hacer</div>
+                                    <div className="nf-card-subtitle">Paso a paso</div>
                                 </div>
-                            ))}
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 10 }}>
+                                {result.pasos.map((p, i) => (
+                                    <div key={i} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', background: 'var(--nf-bg-secondary)', padding: '14px 16px', borderRadius: 8 }}>
+                                        <div style={{ background: 'var(--nf-primary)', color: 'white', width: 28, height: 28, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', flexShrink: 0 }}>
+                                            {p.paso || (i+1)}
+                                        </div>
+                                        <div style={{ fontSize: 15, color: 'var(--nf-text)', lineHeight: 1.5, paddingTop: 3 }}>
+                                            {p.desc}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     )}
 
-                    {/* Acción Recomendada */}
-                    <div className="nf-card nf-animate-in" style={{ marginBottom: 0 }}>
+                    {/* 4. Lugar */}
+                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.15s' }}>
                         <div className="nf-card-header">
-                            <div className="nf-card-icon green">✅</div>
+                            <div className="nf-card-icon blue" style={{ fontSize: 24, width: 48, height: 48 }}>📍</div>
                             <div>
-                                <div className="nf-card-title">Acción Recomendada</div>
-                                <div className="nf-card-subtitle">Qué hacer ahora</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Dónde Hacerlo</div>
+                                <div className="nf-card-subtitle">Institución o lugar correspondiente</div>
                             </div>
                         </div>
-                        <div className={`nf-alert ${result.riesgo === 'alto' ? 'danger' : result.riesgo === 'medio' ? 'warning' : 'success'}`}>
-                            <span className="nf-alert-icon">{result.riesgo === 'alto' ? '🚨' : result.riesgo === 'medio' ? '⚠️' : '✅'}</span>
-                            <span>{result.accionRecomendada}</span>
+                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.lugar}</p>
+                    </div>
+
+                    {/* 5. Consejo Practico */}
+                    <div className="nf-card nf-animate-in" style={{ marginBottom: 16, animationDelay: '.2s' }}>
+                        <div className="nf-card-header">
+                            <div className="nf-card-icon orange" style={{ fontSize: 24, width: 48, height: 48 }}>💡</div>
+                            <div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Consejo Práctico</div>
+                                <div className="nf-card-subtitle">Tip extra de tu guía legal</div>
+                            </div>
                         </div>
+                        <p style={{ color: 'var(--nf-text)', fontSize: 16, lineHeight: 1.6 }}>{result.consejo}</p>
                     </div>
 
                     <div className="nf-disclaimer">
-                        <span>⚠️</span>
-                        Este análisis fue generado por IA (GPT-4o Mini). Para casos complejos, consulte con un abogado.
+                        <span>ℹ️</span>
+                        Esta guía fue generada por IA en base a la resolución provista. Si tu caso es muy complejo, siempre es recomendable confirmar con un abogado de la Corporación de Asistencia Judicial.
                     </div>
                 </div>
             )}

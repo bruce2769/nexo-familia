@@ -277,12 +277,22 @@ def _procesar_texto_scanner(texto: str, uid: str | None = None) -> dict:
         return cached
 
     system_prompt = (
-        "Eres un abogado experto en Derecho de Familia chileno. "
-        "Analiza resoluciones judiciales y explícalas claramente. "
-        "Responde SOLO con JSON válido, sin texto adicional."
+        "Eres un guía práctico experto en Derecho de Familia chileno. "
+        "Tu objetivo es explicar resoluciones a personas comunes sin conocimientos legales. "
+        "PROHIBIDO usar lenguaje jurídico complejo, párrafos largos difíciles o asumir conocimientos legales. "
+        "Responde SOLO con JSON válido, estructurado exactamente con estas 5 claves: "
+        "'resumen_simple', 'significado', 'pasos', 'lugar', 'consejo'."
     )
-    prompt = f"""Analiza esta resolución judicial chilena. Devuelve JSON:
-{{"tipo": "tipo corto", "resumen": "2 oraciones", "puntosClave": [{{"label": "...", "value": "...", "icon": "emoji"}}], "accionRecomendada": "acción concreta", "riesgo": "bajo|medio|alto"}}
+    prompt = f"""Analiza esta resolución judicial chilena. Devuelve JSON estructurado así:
+{{
+  "resumen_simple": "1 o 2 líneas máximo, súper claro",
+  "significado": "Qué significa esto en palabras muy simples",
+  "pasos": [
+    {{"paso": "1", "desc": "Acción concreta 1 (ej: ir a tribunal, reunir documentos)"}}
+  ],
+  "lugar": "Dónde hacerlo (comuna, tribunal en Chile si aplica)",
+  "consejo": "Un consejo práctico para la persona"
+}}
 
 Resolución:
 {texto_seguro}"""
@@ -317,11 +327,11 @@ Resolución:
     except Exception as e:
         logger.error(f"❌ [Scanner] Error: {e}")
         return {
-            "tipo": "Resolución Judicial",
-            "resumen": "El sistema de IA no pudo completar el análisis. Inténtelo nuevamente.",
-            "puntosClave": [{"label": "Estado", "value": "Análisis no disponible", "icon": "⚠️"}],
-            "accionRecomendada": "Vuelve a intentar o contacta soporte.",
-            "riesgo": "medio",
+            "resumen_simple": "El sistema de IA no pudo completar el análisis.",
+            "significado": "Ocurrió un error temporal al intentar leer tu documento.",
+            "pasos": [{"paso": "1", "desc": "Vuelve a intentarlo en unos minutos o contacta a soporte"}],
+            "lugar": "Misma aplicación",
+            "consejo": "Si el problema persiste, intenta subir una imagen o PDF más claro.",
             "fuente": "fallback",
             "error": str(e)[:100]
         }

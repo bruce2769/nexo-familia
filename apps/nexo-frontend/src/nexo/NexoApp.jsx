@@ -10,7 +10,6 @@ import MuroModule from './modules/MuroModule.jsx';
 import GuiasModule from './modules/GuiasModule.jsx';
 import GlosarioModule from './modules/GlosarioModule.jsx';
 import HistorialModule from './modules/HistorialModule.jsx';
-import DocumentosModule from './modules/DocumentosModule.jsx';
 import ScannerModule from './modules/ScannerModule.jsx';
 import RadarModule from './modules/RadarModule.jsx';
 import EstadoModule from './modules/EstadoModule.jsx';
@@ -31,7 +30,6 @@ const TABS = [
     { id: 'mapa-jueces', label: '🗺️ Mapa de Jueces', highlight: true },
     { id: 'riesgo', label: '🚦 Riesgo' },
     { id: 'estado', label: '📍 Mis Causas' },
-    { id: 'documentos', label: '📄 Documentos' },
     { id: 'scanner', label: '🔍 Escáner' },
     { id: 'escritos', label: '📝 Escritos Legales', highlight: true },
     { id: 'guias', label: '📚 Guías' },
@@ -76,7 +74,6 @@ function NexoAppContent() {
             case 'radar': return <RadarModule onNavigate={navigate} />;
             case 'riesgo': return <RiesgoModule />;
             case 'estado': return <EstadoModule />;
-            case 'documentos': return <DocumentosModule />;
             case 'scanner': return <ScannerModule />;
             case 'escritos': return <EscritosModule />;
             case 'muro': return <MuroModule />;

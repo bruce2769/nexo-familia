@@ -77,7 +77,6 @@ function NexoAppContent() {
             case 'diagnostico': return <DiagnosticoModule onNavigate={navigate} />;
             case 'causa': return <CausaModule />;
             case 'calculadora': return <CalculadoraModule />;
-            case 'calculadora': return <CalculadoraModule />;
             case 'riesgo': return <RiesgoModule />;
             case 'estado': return <EstadoModule />;
             case 'scanner': return <ScannerModule />;

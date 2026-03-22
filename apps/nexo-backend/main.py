@@ -822,13 +822,16 @@ REGLAS ABSOLUTAS:
 - ROL ESTRICTO DE PARTES: El demandante SIEMPRE es el usuario compareciente ({req.nombre_usuario}) y la contraparte es el beneficiario (hijo/a) representado por el otro progenitor. NUNCA pongas al usuario como demandante y demandado a la vez.
 
 ESTRUCTURA OBLIGATORIA DEL ESCRITO:
-1. **SUMA**: Precisa y al punto (ej: "SOLICITA REBAJA DE PENSIÓN ALIMENTICIA.")
-2. **INDIVIDUALIZACIÓN**: NUNCA digas "a favor de mi contraparte". Debes decir: "en favor de mi hijo/a [Nombre Completo Hijo/a], representado legalmente por [Nombre de la madre/padre o contraparte]". Si no tienes el nombre del hijo, usa "[NOMBRE DEL HIJO/A]".
-3. **HECHOS**: Si es por cesantía, incluye fechas exactas (o marcadores [Fecha]) de despido y menciona explícitamente que el vínculo terminó "según consta en finiquito que se acompaña".
-4. **DERECHO**: Cita los artículos pertinentes.
-5. **PRUEBA**: Siempre incluye una sección explícita de documentos a acompañar. OBLIGATORIO: Para demandas de familia como rebaja, añade "1. Acta de mediación frustrada (Obligatorio por ley). 2. Certificado de nacimiento. 3. Finiquito de trabajo (si aplica)."
-6. **OTROSÍ DE NOTIFICACIONES**: Menciona la aceptación expresa de notificaciones por correo electrónico.
-7. **OTROSÍ DE PATROCINIO Y PODER**: SIEMPRE añade un Otrosí designando abogado patrocinante y apoderado ("Vengo en designar abogado patrocinante y conferir poder a...").
+1. **SUMA**: Precisa y al punto (ej: "SOLICITA REBAJA DE PENSIÓN ALIMENTICIA.") alineada a la derecha.
+2. **PRESÉNTASE**: "S.J.L. DE FAMILIA DE [CIUDAD]".
+3. **COMPARECENCIA**: Individualización completa ("Yo, {req.nombre_usuario}{rut}{direccion} en autos caratulados...").
+4. **CUERPO/HECHOS**: Dividido en numerales (1, 2, 3...). Si es por cesantía, incluye fechas exactas de despido y menciona el finiquito.
+5. **FUNDAMENTOS DE DERECHO**: Cita los artículos pertinentes (obligatoriamente Art. 10 Ley 14.908 y Art. 332 Código Civil si es rebaja).
+6. **PETICIÓN**: Terminar con "POR TANTO, A S.S. PIDO...".
+7. **OTROSÍES** (Obligatorios y no pueden faltar):
+   - **1er OTROSÍ (Documentos)**: Acompaña Acta de mediación frustrada y certificado de cese laboral/finiquito.
+   - **2do OTROSÍ (Patrocinio y Poder)**: "Vengo en designar abogado patrocinante y conferir poder a..." dejando espacio para el nombre y RUT del letrado.
+   - **3er OTROSÍ (Notificaciones)**: Notificación por correo electrónico según Ley 21.394 al {req.email_usuario or "[CORREO]"}.
 
 Responde SOLO con un JSON con exactamente estas claves:
 {
@@ -837,30 +840,19 @@ Responde SOLO con un JSON con exactamente estas claves:
   "advertencias": ["lista de cosas urgentes, EJ: recordar que en Chile los tribunales evalúan activos en AFP o ahorros antes de conceder rebajas solo por cesantía"]
 }"""
 
-    prompt = f"""Redacta un escrito judicial de tipo: {tipo_label}
-
-DATOS DEL CASO:
+    prompt = f"""Genera un escrito de {tipo_label} con los siguientes datos:
+- Nombre Usuario: {nombre}
+- RUT Usuario: {req.rut_usuario or "[COMPLETAR RUT]"}
+- Domicilio: {req.direccion_usuario or "[COMPLETAR DIRECCIÓN]"}
+- Representante legal contraparte: {contraparte or "[NOMBRE CONTRAPARTE]"}
+- Motivo: {req.situacion}
 - Tribunal: {tribunal_str}
 - {rit_str}
-- Nombre del compareciente: {nombre}
-- RUT: {req.rut_usuario or "[COMPLETAR RUT]"}
-- Dirección: {req.direccion_usuario or "[COMPLETAR DIRECCIÓN]"}
-- Contacto: {contacto_str}
-- Representante legal de los menores (contraparte): {contraparte or "[NOMBRE CONTRAPARTE]"}
-- Situación / Hechos del usuario: {req.situacion}
+- Formas de Contacto: {contacto_str}
 
-LEYES APLICABLES A CITAR: {leyes_texto}
+Leyes obligatorias a citar: {leyes_texto}
 
-ESTRUCTURA OBLIGATORIA DEL ESCRITO:
-1. ENCABEZADO: "{tribunal_str} / {rit_str}"
-2. COMPARECENCIA: "Yo, {nombre}{rut}{direccion} en autos caratulados [NOMBRE CAUSA]..."
-3. EXPONGO / EXPONE: Hechos ordenados numéricamente, claros y concisos, basados en la "Situación del usuario"
-4. FUNDAMENTOS DE DERECHO: Citar artículos exactos de las leyes {leyes_texto}
-5. POR TANTO: Petición concreta al tribunal
-6. OTROSÍ (Forma de Notificación): Solicitar que las notificaciones se realicen al {contacto_str}. Agrega otros otrosíes si el tipo de escrito lo requiere.
-7. [Ciudad], [fecha] / Firma: "{nombre} / RUT: {req.rut_usuario or '___________'}"
-
-IMPORTANTE: El escrito debe poder presentarse directamente en tribunal. Usa [COMPLETAR] para campos que el usuario debe llenar (domicilio, fechas específicas, montos concretos si no se proporcionaron).
+IMPORTANTE: El escrito debe poder presentarse directamente en tribunal. Usa [COMPLETAR] para campos que el usuario debe llenar (fechas exactas, montos específicos o domicilios incompletos).
 
 Genera el escrito ahora:"""
 
@@ -948,8 +940,16 @@ def generar_pdf_basico(texto_escrito: str, req: EscritoRequest) -> str:
             story.append(Spacer(1, 12))
             continue
             
-        if not body_started and any(x in text.upper() for x in ["SUMA:", "S U M A :", "RIT:", "MATERIA:", "EN LO PRINCIPAL", "SOLICITA:"]):
-            story.append(Paragraph(text, style_header))
+        text_no_spaces = text.upper().replace(" ", "")
+        if not body_started and any(x in text_no_spaces for x in ["SUMA:", "RIT:", "MATERIA:", "ENLOPRINCIPAL", "SOLICITA:", "S.J.L."]):
+            # Wait, S.J.L. shouldn't be header aligned to the right. Let's fix that.
+            if "S.J.L." in text_no_spaces or "S.S." in text_no_spaces:
+                body_started = True
+                story.append(Spacer(1, 12))
+                story.append(Paragraph(text, style_normal))
+                story.append(Spacer(1, 6))
+            else:
+                story.append(Paragraph(text, style_header))
             continue
             
         if "S.J.L." in text.upper() or "S.S." in text.upper() or "S.S.ª" in text.upper():
@@ -995,15 +995,21 @@ def generar_docx_basico(texto_escrito: str, req: EscritoRequest) -> str:
             text = line.strip()
             if not text:
                 continue
+            
+            text_no_spaces = text.upper().replace(" ", "")
             p = doc.add_paragraph()
             p.paragraph_format.line_spacing = 1.5
             run = p.add_run(text)
             run.font.name = 'Arial'
             run.font.size = Pt(12)
             
-            if not body_started and any(x in text.upper() for x in ["SUMA:", "S U M A :", "RIT:", "MATERIA:", "EN LO PRINCIPAL", "SOLICITA:"]):
-                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                run.bold = True
+            if not body_started and any(x in text_no_spaces for x in ["SUMA:", "RIT:", "MATERIA:", "ENLOPRINCIPAL", "SOLICITA:"]):
+                if "S.J.L." in text_no_spaces or "S.S." in text_no_spaces:
+                    body_started = True
+                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                else:
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    run.bold = True
                 continue
                 
             if "S.J.L." in text.upper() or "S.S." in text.upper() or "S.S.ª" in text.upper():

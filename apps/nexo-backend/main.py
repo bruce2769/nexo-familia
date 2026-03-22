@@ -26,7 +26,25 @@ try:
     _sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     if _sa_json and not firebase_admin._apps:
         try:
-            cred_dict = json.loads(_sa_json, strict=False)
+            # ── Parser robusto: Railway a veces almacena \n como \\n en la private_key ──
+            # Intento 1: parse directo
+            cred_dict = None
+            for attempt, json_str in enumerate([
+                _sa_json,                         # 1. Tal como está
+                _sa_json.replace('\\n', '\n'),     # 2. Convertir \\n → \n (fix Railway)
+                _sa_json.replace('\\n', '\n').replace("\\'", "'"),  # 3. Fix extra escapes
+            ]):
+                try:
+                    cred_dict = json.loads(json_str, strict=False)
+                    if attempt > 0:
+                        logger.info(f"✅ Firebase JSON parseado en intento {attempt + 1} (fix \\n aplicado).")
+                    break
+                except json.JSONDecodeError:
+                    continue
+
+            if cred_dict is None:
+                raise ValueError("No se pudo parsear FIREBASE_SERVICE_ACCOUNT_JSON después de 3 intentos.")
+
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
             db = firestore.client()
@@ -46,6 +64,7 @@ try:
 except ImportError:
     FIREBASE_ADMIN_OK = False
     db = None
+
 
 # ─── Validación de variables de entorno críticas ───────────────────────────────
 REQUIRED_ENV = ["ALLOWED_ORIGINS", "OPENAI_API_KEY"]

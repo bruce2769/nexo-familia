@@ -794,7 +794,9 @@ async def generar_escrito(
         if not validar_rut_chileno(req.rut_usuario):
             raise HTTPException(status_code=400, detail="El RUT ingresado no es válido. Verifica el dígito verificador y formato.")
 
-    uid = _user.get("uid") if _user else "test-user"
+    uid = _user.get("uid") if _user else None
+    if not uid:
+        raise HTTPException(status_code=401, detail="Usuario no autenticado.")
     user_email = _user.get("email") if _user else req.email_usuario
     is_anonymous = False
     if _user and _user.get("firebase", {}).get("sign_in_provider") == "anonymous":

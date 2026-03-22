@@ -25,7 +25,7 @@ export const AuthProvider = ({ children }) => {
             if (user && !user.isAnonymous) {
                 try {
                     const { getDoc, doc } = await import('firebase/firestore');
-                    const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+                    const userDoc = await getDoc(doc(db, 'users', user.uid));
                     if (userDoc.exists()) {
                         setUserData(userDoc.data());
                     } else {
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
     const register = async (email, password, name) => {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
         try {
-            await setDoc(doc(db, 'usuarios', cred.user.uid), {
+            await setDoc(doc(db, 'users', cred.user.uid), {
                 displayName: name,
                 email,
                 role: 'user',

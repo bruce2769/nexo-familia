@@ -1,11 +1,11 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import './nexo.css';
 import Sidebar from './components/Sidebar.jsx';
-import DiagnosticoModule from './modules/DiagnosticoModule.jsx'; // Main landing module, keeping it static for FCP
-import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx'; 
+import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
+import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx';
 import Topbar from './components/Topbar.jsx';
 
-// ── Lazing Loading on Secondary Modules (Optimizes Initial Bundle Size) ──
+// ── Lazy Loading on Secondary Modules ──
 const CausaModule = lazy(() => import('./modules/CausaModule.jsx'));
 const RiesgoModule = lazy(() => import('./modules/RiesgoModule.jsx'));
 const MuroModule = lazy(() => import('./modules/MuroModule.jsx'));
@@ -15,20 +15,20 @@ const HistorialModule = lazy(() => import('./modules/HistorialModule.jsx'));
 const ScannerModule = lazy(() => import('./modules/ScannerModule.jsx'));
 const EstadoModule = lazy(() => import('./modules/EstadoModule.jsx'));
 const CalculadoraModule = lazy(() => import('./modules/CalculadoraModule.jsx'));
-const AuthModule = lazy(() => import('./modules/AuthModule.jsx')); 
-const CopilotoModule = lazy(() => import('./modules/CopilotoModule.jsx')); 
-const MapaJuecesModule = lazy(() => import('./modules/MapaJuecesModule.jsx')); 
-const EscritosModule = lazy(() => import('./modules/EscritosModule.jsx')); 
+const AuthModule = lazy(() => import('./modules/AuthModule.jsx'));
+const CopilotoModule = lazy(() => import('./modules/CopilotoModule.jsx'));
+const EscritosModule = lazy(() => import('./modules/EscritosModule.jsx'));
+
+// ── Radar Judicial eliminado (requiere integración real con Poder Judicial) ──
 
 const TABS = [
-    { id: 'diagnostico', label: '🧠 Diagnóstico', highlight: true },
-    { id: 'copiloto', label: '💬 Abogado IA 24/7', highlight: true },
+    { id: 'diagnostico', label: '⚖️ Diagnóstico', highlight: true },
+    { id: 'copiloto', label: '🤖 Abogado IA 24/7', highlight: true },
     { id: 'causa', label: '📋 Causa' },
     { id: 'calculadora', label: '🧮 Calculadora Financiera' },
-    { id: 'muro', label: '💬 Comunidad' },
-    { id: 'mapa-jueces', label: '🗺️ Mapa de Jueces', highlight: true },
-    { id: 'riesgo', label: '🚦 Riesgo' },
-    { id: 'estado', label: '📍 Mis Causas' },
+    { id: 'muro', label: '🤝 Comunidad' },
+    { id: 'riesgo', label: '⚠️ Riesgo' },
+    { id: 'estado', label: '📌 Mis Causas' },
     { id: 'scanner', label: '🔍 Escáner' },
     { id: 'escritos', label: '📝 Escritos Legales', highlight: true },
     { id: 'guias', label: '📚 Guías' },
@@ -67,41 +67,47 @@ function NexoAppContent() {
 
     const LoadingFallback = () => (
         <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{ width: 40, height: 40, border: '3px solid #334155', borderTopColor: '#3b82f6', borderRadius: '50%', animation: 'nf-spin 1s linear infinite', margin: '0 auto 16px' }} />
+            <div style={{
+                width: 40,
+                height: 40,
+                border: '3px solid #334155',
+                borderTopColor: '#3b82f6',
+                borderRadius: '50%',
+                animation: 'nf-spin 1s linear infinite',
+                margin: '0 auto 16px'
+            }} />
             Cargando módulo...
         </div>
     );
 
     const renderModule = () => {
         switch (activeTab) {
-            case 'diagnostico': return <DiagnosticoModule onNavigate={navigate} />;
-            case 'causa': return <CausaModule />;
-            case 'calculadora': return <CalculadoraModule />;
-            case 'riesgo': return <RiesgoModule />;
-            case 'estado': return <EstadoModule />;
-            case 'scanner': return <ScannerModule />;
-            case 'escritos': return <EscritosModule />;
-            case 'muro': return <MuroModule />;
-            case 'guias': return <GuiasModule />;
-            case 'glosario': return <GlosarioModule />;
-            case 'historial': return <HistorialModule onNavigate={navigate} />;
-            case 'auth': return <AuthModule onNavigate={navigate} />;
-            case 'copiloto': return <CopilotoModule />;
-            case 'mapa-jueces': return <MapaJuecesModule />;
-            default: return <DiagnosticoModule onNavigate={navigate} />;
+            case 'diagnostico':  return <DiagnosticoModule onNavigate={navigate} />;
+            case 'causa':        return <CausaModule />;
+            case 'calculadora':  return <CalculadoraModule />;
+            case 'riesgo':       return <RiesgoModule />;
+            case 'estado':       return <EstadoModule />;
+            case 'scanner':      return <ScannerModule />;
+            case 'escritos':     return <EscritosModule />;
+            case 'muro':         return <MuroModule />;
+            case 'guias':        return <GuiasModule />;
+            case 'glosario':     return <GlosarioModule />;
+            case 'historial':    return <HistorialModule onNavigate={navigate} />;
+            case 'auth':         return <AuthModule onNavigate={navigate} />;
+            case 'copiloto':     return <CopilotoModule />;
+            default:             return <DiagnosticoModule onNavigate={navigate} />;
         }
     };
 
-    // Agregar la tab de Auth dinámicamente según estado
     const APP_TABS = [
         ...TABS,
-        { id: 'auth', label: currentUser ? '👤 Mi Perfil' : '🔑 Ingresar' }
+        { id: 'auth', label: currentUser ? '👤 Mi Perfil' : '🔐 Ingresar' }
     ];
 
     return (
         <div className="nf-app-layout">
             <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
-            
+
             <div className="nf-content-wrapper">
                 <Topbar onNavigate={navigate} />
                 <main className="nf-main" key={activeTab}>
@@ -122,14 +128,18 @@ function NexoAppContent() {
                             Interpreta tu causa, calcula tu impacto financiero, evalúa tu riesgo y genera documentos legales.
                         </p>
                         <div className="nf-modal-features">
-                            <div className="nf-modal-feature"><span>🧠</span> Diagnóstico inteligente guiado</div>
+                            <div className="nf-modal-feature"><span>⚖️</span> Diagnóstico inteligente guiado</div>
                             <div className="nf-modal-feature"><span>🧮</span> Calculadora de pensión (IPC)</div>
                             <div className="nf-modal-feature"><span>📋</span> Interpreta causas judiciales</div>
-                            <div className="nf-modal-feature"><span>🚦</span> Evalúa tu nivel de riesgo</div>
-                            <div className="nf-modal-feature"><span>📄</span> Genera documentos legales</div>
-                            <div className="nf-modal-feature"><span>💬</span> Comunidad de apoyo anónima</div>
+                            <div className="nf-modal-feature"><span>⚠️</span> Evalúa tu nivel de riesgo</div>
+                            <div className="nf-modal-feature"><span>📝</span> Genera documentos legales</div>
+                            <div className="nf-modal-feature"><span>🤝</span> Comunidad de apoyo anónima</div>
                         </div>
-                        <button className="nf-btn nf-btn-primary" onClick={closeOnboarding} style={{ width: '100%', marginTop: 8 }}>
+                        <button
+                            className="nf-btn nf-btn-primary"
+                            onClick={closeOnboarding}
+                            style={{ width: '100%', marginTop: 8 }}
+                        >
                             🚀 Comenzar
                         </button>
                         <p className="nf-modal-disclaimer">

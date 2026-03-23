@@ -48,16 +48,7 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (email, password, name) => {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
-        try {
-            await setDoc(doc(db, 'users', cred.user.uid), {
-                displayName: name,
-                email,
-                role: 'user',
-                createdAt: serverTimestamp()
-            });
-        } catch (e) {
-            console.warn('No se pudo guardar perfil en Firestore:', e.message);
-        }
+        // Note: The backend lazy-initializes the profile in 'users' on the first API call.
         return cred;
     };
 

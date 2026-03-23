@@ -111,16 +111,18 @@ async def verify_firebase_token(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme)
 ):
     if not FIREBASE_ADMIN_OK:
-        return {"uid": "test-user"}
+        # In production this should be a 503 error
+        raise HTTPException(status_code=503, detail="Firebase Admin SDK no inicializado.")
+    
     if credentials is None:
-        logger.warning("Modo testing sin auth: Token ausente, asignando test-user.")
-        return {"uid": "test-user"}
+        raise HTTPException(status_code=401, detail="Token de autorización ausente.")
+        
     try:
         decoded = firebase_auth.verify_id_token(credentials.credentials)
         return decoded
     except Exception as e:
-        logger.warning(f"Modo testing sin auth: Token inválido '{str(e)[:80]}', asignando test-user.")
-        return {"uid": "test-user"}
+        logger.error(f"[Auth] Token inválido: {e}")
+        raise HTTPException(status_code=401, detail=f"Token inválido o expirado: {str(e)[:50]}")
 
 # ─── Configuración OpenAI ──────────────────────────────────────────────────────
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
@@ -241,7 +243,7 @@ def _verificar_limite_diario(uid: str) -> bool:
         return True
     try:
         hoy = date.today().isoformat()
-        doc_ref = db.collection("usuarios").document(uid).collection("ia_usage").document(hoy)
+        doc_ref = db.collection("users").document(uid).collection("ia_usage").document(hoy)
         doc = doc_ref.get()
         if doc.exists:
             conteo = doc.to_dict().get("requests", 0)
@@ -397,7 +399,7 @@ Resolución:
         # 📝 Historial Firestore (solo metadata)
         if FIREBASE_ADMIN_OK and db is not None and uid:
             try:
-                db.collection("usuarios").document(uid).collection("scanner_historial").document().set({
+                db.collection("users").document(uid).collection("scanner_historial").add({
                     "resumen": analisis.get("resumen", ""),
                     "riesgo":  analisis.get("riesgo", "medio"),
                     "tipo":    analisis.get("tipo", "Desconocido"),
@@ -803,7 +805,7 @@ async def generar_escrito(
         is_anonymous = True
 
     # 1. BARRERA DE PEAJE (Créditos)
-    if FIREBASE_ADMIN_OK and db is not None and uid != "test-user":
+    if FIREBASE_ADMIN_OK and db is not None:
         doc_ref = db.collection("users").document(uid)
         doc = doc_ref.get()
         if not doc.exists:
@@ -911,7 +913,7 @@ Genera el escrito ahora:"""
                 advertencias.insert(0, "¡IMPORTANTE! En Chile, para demandar rebaja de alimentos, es REQUISITO DE ADMISIBILIDAD contar con el Certificado de Mediación Frustrada. Si no lo tienes, la demanda será rechazada de plano.")
                 
         # 2. CONSUMO (Débito)
-        if FIREBASE_ADMIN_OK and db is not None and uid != "test-user":
+        if FIREBASE_ADMIN_OK and db is not None:
             user_ref = db.collection("users").document(uid)
             user_ref.update({"credits": firestore.Increment(-1)})
             user_ref.collection("transactions").add({
@@ -1094,12 +1096,17 @@ async def listar_tipos_escrito():
     """Lista todos los tipos de escritos disponibles."""
     return TIPOS_ESCRITO
 
+class UserInitRequest(BaseModel):
+    name: str = ""
+    email: str = ""
+
 class TopupRequest(BaseModel):
     userId: str
     amount: int
 
 @app.post("/api/v1/payments/create-checkout-session", tags=["Payments"])
 async def create_checkout_session(req: TopupRequest):
+    logger.info(f"[Stripe] Checkout request: userId={req.userId}, amount={req.amount}")
     """Crea una sesión de Checkout en Stripe para recargar créditos."""
     amount = int(req.amount * 500) # CLP 500 por crédito, integral (sin decimales)
     try:
@@ -1229,6 +1236,34 @@ async def mercadopago_webhook(request: Request):
             raise HTTPException(status_code=500, detail=str(e))
 
     return {"status": "ok"}
+
+@app.post("/api/v1/users/init", tags=["Users"])
+async def init_user_profile(_user=Depends(verify_firebase_token), req: UserInitRequest = None):
+    """Inicializa el perfil del usuario con 3 créditos al registrarse."""
+    uid = _user.get("uid") if _user else None
+    if not uid:
+        raise HTTPException(status_code=401, detail="Usuario no autenticado.")
+    
+    if not FIREBASE_ADMIN_OK or db is None:
+        raise HTTPException(status_code=503, detail="Base de datos no disponible.")
+    
+    doc_ref = db.collection("users").document(uid)
+    doc = doc_ref.get()
+    
+    if doc.exists:
+        # Ya existe, devolver datos actuales sin modificar
+        return {"status": "exists", "credits": doc.to_dict().get("credits", 0)}
+    
+    # Crear perfil nuevo con 3 créditos
+    doc_ref.set({
+        "credits": 3,
+        "email": req.email if req else "",
+        "name": req.name if req else "",
+        "isAnonymous": False,
+        "createdAt": firestore.SERVER_TIMESTAMP,
+    })
+    logger.info(f"✅ Perfil inicializado con 3 créditos para {uid}")
+    return {"status": "created", "credits": 3}
 
 
 @app.get("/api/v1/escritos/history/{user_id}", tags=["Escritos"])

@@ -1,6 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { simulateCopilotResponse } from '../engine/localCopilot.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { getAuth } from "firebase/auth";
+
+const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
 export default function CopilotoModule() {
     const { currentUser } = useAuth();
@@ -38,10 +40,32 @@ export default function CopilotoModule() {
         setIsTyping(true);
 
         try {
-            const responseText = await simulateCopilotResponse(text);
+            let token = "";
+            const auth = getAuth();
+            if (auth.currentUser) {
+                token = await auth.currentUser.getIdToken(true);
+            } else if (currentUser) {
+                token = await currentUser.getIdToken(true);
+            }
+
+            const res = await fetch(`${BACKEND_URL}/api/v1/copiloto`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify({ message: text })
+            });
+
+            if (!res.ok) throw new Error('Error de red al consultar el copiloto');
+
+            const data = await res.json();
+            const responseText = data.response || data.reply || data.message || "Respuesta recibida, pero con formato inesperado.";
+
             setIaOnline(true);
             setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'copilot', text: responseText }]);
-        } catch {
+        } catch (err) {
+            console.error("[Copiloto] Error:", err);
             setIaOnline(false);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
@@ -54,7 +78,7 @@ export default function CopilotoModule() {
     };
 
     return (
-        <div className="nf-animate-in" style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: 800, margin: '20px auto', background: 'var(--nf-bg2)', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--nf-border)', boxShadow: '0 8px 30px rgba(0,0,0,0.1)' }}>
+        <div className="nf-animate-in" style={{ width: '100%', display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', maxWidth: 800, margin: '20px auto', background: 'var(--nf-bg2)', borderRadius: 16, overflow: 'hidden', border: '1px solid var(--nf-border)', boxShadow: '0 8px 30px rgba(0,0,0,0.1)' }}>
 
             {/* Header */}
             <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--nf-border)', background: 'var(--nf-bg)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

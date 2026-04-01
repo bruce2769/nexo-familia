@@ -1,6 +1,7 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import './nexo.css';
 import Sidebar from './components/Sidebar.jsx';
+import BottomNav from './components/BottomNav.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
 import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx';
 import Topbar from './components/Topbar.jsx';
@@ -116,6 +117,8 @@ function NexoAppContent() {
                     </Suspense>
                 </main>
             </div>
+
+            <BottomNav activeTab={activeTab} onTabChange={navigate} />
 
             {/* Onboarding Modal */}
             {showOnboarding && (

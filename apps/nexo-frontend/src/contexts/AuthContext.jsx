@@ -8,7 +8,7 @@ import {
     signInAnonymously
 } from 'firebase/auth';
 import { auth, db } from '../firebase/config';
-import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 
 const AuthContext = createContext({});
 
@@ -17,26 +17,33 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
     const [currentUser, setCurrentUser] = useState(null);
     const [userData, setUserData] = useState(null);
+    const [credits, setCredits] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
             setCurrentUser(user);
-            if (user && !user.isAnonymous) {
-                try {
-                    const { getDoc, doc } = await import('firebase/firestore');
-                    const userDoc = await getDoc(doc(db, 'users', user.uid));
-                    if (userDoc.exists()) {
-                        setUserData(userDoc.data());
-                    } else {
-                        setUserData({ role: 'user' });
-                    }
-                } catch (e) {
-                    console.warn('Error fetching user data:', e);
-                    setUserData({ role: 'user' });
+            if (user) {
+                // Sincronizar créditos en tiempo real
+                if (user.isAnonymous) {
+                    setCredits(1);
+                    setUserData({ role: 'guest' });
+                } else {
+                    const { getDoc, doc, onSnapshot } = await import('firebase/firestore');
+                    onSnapshot(doc(db, 'users', user.uid), (snap) => {
+                        if (snap.exists()) {
+                            const data = snap.data();
+                            setCredits(data.credits ?? 0);
+                            setUserData(data);
+                        } else {
+                            setCredits(0);
+                            setUserData({ role: 'user' });
+                        }
+                    });
                 }
             } else {
                 setUserData(null);
+                setCredits(null);
             }
             setLoading(false);
         });
@@ -61,7 +68,8 @@ export const AuthProvider = ({ children }) => {
         login,
         register,
         logout,
-        loginAnonymously
+        loginAnonymously,
+        credits
     };
 
     if (loading) return null;

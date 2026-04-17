@@ -39,13 +39,15 @@ export default function CopilotoModule() {
         setInput('');
         setIsTyping(true);
 
+        // 💡 HARDENING: Timeout de 15 segundos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
         try {
             let token = "";
             const auth = getAuth();
             if (auth.currentUser) {
                 token = await auth.currentUser.getIdToken(true);
-            } else if (currentUser) {
-                token = await currentUser.getIdToken(true);
             }
 
             const res = await fetch(`${BACKEND_URL}/api/v1/copiloto`, {
@@ -54,23 +56,38 @@ export default function CopilotoModule() {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ message: text })
+                body: JSON.stringify({ mensaje: text }),
+                signal: controller.signal
             });
 
-            if (!res.ok) throw new Error('Error de red al consultar el copiloto');
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                const errorBody = await res.json().catch(() => ({}));
+                throw new Error(errorBody.detail || `Error ${res.status}: Servidor no disponible`);
+            }
 
             const data = await res.json();
-            const responseText = data.response || data.reply || data.message || "Respuesta recibida, pero con formato inesperado.";
+            const responseText = data.respuesta || "No recibí una respuesta clara de NEXO.";
 
             setIaOnline(true);
             setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'copilot', text: responseText }]);
         } catch (err) {
+            clearTimeout(timeoutId);
             console.error("[Copiloto] Error:", err);
             setIaOnline(false);
+            
+            let errorMsg = '⚠️ El servicio de IA está experimentando dificultades. Reintenta en unos segundos.';
+            if (err.name === 'AbortError') {
+                errorMsg = '⚠️ La consulta está demorando más de lo esperado (Timeout). Por favor, intenta con una pregunta más corta o reintenta ahora.';
+            } else if (err.message.includes('403') || err.message.includes('Saldo') || err.message.includes('Créditos')) {
+                errorMsg = `⚠️ ${err.message}`;
+            }
+
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 sender: 'error',
-                text: '⚠️ El servicio de IA no está disponible en este momento. Por favor, inténtalo de nuevo en unos instantes.'
+                text: errorMsg
             }]);
         } finally {
             setIsTyping(false);

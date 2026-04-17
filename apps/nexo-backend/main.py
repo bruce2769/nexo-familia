@@ -165,9 +165,20 @@ app.add_middleware(
 # ─── Middleware de logging de requests ─────────────────────────────────────────
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
-    logger.info(f"→ {request.method} {request.url.path} | client={request.client.host if request.client else 'unknown'}")
+    user_id = "anonymous"
+    # Intentar extraer info de usuario si el header existe
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            # No podemos verificar el token aquí sin await, pero podemos loguear la intención
+            user_id = "authenticated"
+        except: pass
+
+    start_time = time.time()
+    logger.info(f"🚀 {request.method} {request.url.path} | user={user_id}")
     response = await call_next(request)
-    logger.info(f"← {request.method} {request.url.path} | status={response.status_code}")
+    duration = (time.time() - start_time) * 1000
+    logger.info(f"🏁 {request.method} {request.url.path} | status={response.status_code} | time={duration:.2f}ms")
     return response
 
 # ─── Health check ──────────────────────────────────────────────────────────────
@@ -256,11 +267,42 @@ def _verificar_limite_diario(uid: str) -> bool:
         logger.warning(f"[RateLimit] Error: {e}")
     return True
 
+def _verificar_creditos(uid: str, costo: int = 1) -> int:
+    """Verifica si el usuario tiene créditos suficientes y devuelve el saldo."""
+    if not FIREBASE_ADMIN_OK or db is None or not uid:
+        return 0
+    try:
+        doc = db.collection("users").document(uid).get()
+        if not doc.exists:
+            return 0
+        credits = doc.to_dict().get("credits", 0)
+        if credits < costo:
+            return -1 # Insuficiente
+        return credits
+    except Exception as e:
+        logger.error(f"[Credits] Error verificando: {e}")
+        return 0
+
+def _descontar_credito(uid: str, monto: int = 1):
+    """Resta créditos al usuario tras una operación exitosa."""
+    if not FIREBASE_ADMIN_OK or db is None or not uid:
+        return
+    try:
+        db.collection("users").document(uid).update({
+            "credits": firestore.Increment(-monto)
+        })
+        logger.info(f"[Credits] 📉 -{monto} créditos para {uid}")
+    except Exception as e:
+        logger.error(f"[Credits] Error descontando: {e}")
+
 # ─── Motor IA: OpenAI gpt-4o-mini (ÚNICO motor) ───────────────────────────────
 def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2, max_tokens: int = 200) -> str:
     """
-    Llama a OpenAI gpt-4o-mini con parámetros optimizados.
+    Llama a OpenAI gpt-4o-mini con parámetros optimizados y fallback de seguridad.
     """
+    if not OPENAI_API_KEY:
+        return "El sistema está en modo mantenimiento (Sin API Key). Intenta más tarde."
+
     try:
         client = openai.OpenAI(api_key=OPENAI_API_KEY)
         messages = []
@@ -273,12 +315,16 @@ def llamar_openai(prompt: str, system: str = "", temperatura: float = 0.2, max_t
             messages=messages,
             temperature=temperatura,
             max_tokens=max_tokens,
+            timeout=25.0 # Timeout de 25s para evitar peticiones colgadas
         )
         logger.info(f"[OpenAI] ✅ {response.usage.total_tokens} tokens usados.")
         return response.choices[0].message.content or ""
+    except openai.APITimeoutError:
+        logger.error("[OpenAI] ⏱️ Timeout!")
+        return "El sistema está muy ocupado y no pudo responder a tiempo. Por favor, reintenta en un momento."
     except Exception as e:
         logger.error(f"[OpenAI] Error: {e}")
-        return "{}"
+        return "Lo lamento, el servicio de inteligencia legal está experimentando una alta demanda. Por favor, intenta nuevamente en unos segundos."
 
 def llamar_openai_vision(base64_image: str) -> str:
     """Llama a la visión de gpt-4o-mini para extraer transcripción perfecta."""
@@ -314,21 +360,30 @@ class ScannerRequest(BaseModel):
 
 # ─── Endpoint Copiloto legal ───────────────────────────────────────────────────
 @app.post("/api/v1/copiloto", tags=["IA"])
-async def copiloto_legal(req: CopilotoRequest):
-    """Copiloto legal IA — powered by OpenAI gpt-4o-mini."""
+async def copiloto_legal(req: CopilotoRequest, _user=Depends(verify_firebase_token)):
+    """Copiloto legal IA con validación de créditos."""
+    uid = _user.get("uid")
+    
+    # 1. Validar créditos
+    saldo = _verificar_creditos(uid, costo=1)
+    if saldo == -1:
+        raise HTTPException(status_code=403, detail="Créditos insuficientes para usar el Copiloto.")
+    elif saldo == 0 and FIREBASE_ADMIN_OK:
+        raise HTTPException(status_code=403, detail="No tienes créditos disponibles.")
+
     system_prompt = """Eres NEXO, un asistente legal especializado en Derecho de Familia chileno.
 
-Tu conocimiento incluye:
-- Ley N°14.908 (Alimentos)
-- Código Civil (cuidado personal, relación directa y regular)
-- Ley N°19.968 (Tribunales de Familia)
-- Ley N°20.066 (Violencia Intrafamiliar)
-- Mediación familiar obligatoria en Chile
+Tu rol:
+- Orientar a ciudadanos sobre sus derechos y situación legal en materias de familia.
+- Explicar procesos judiciales, pensiones, alimentos, visitas, mediación, embargos y divorcios.
+- Usar lenguaje claro, empático y accesible, sin tecnicismos innecesarios.
+- Siempre indicar que tus respuestas son orientativas y no reemplazan consulta con un abogado habilitado.
+- Responder en español chileno.
+- Ser concreto: si el usuario pregunta qué puede hacer, dile qué puede hacer paso a paso.
+- Si no sabes algo con certeza, dilo honestamente.
+- No inventar jurisprudencia ni artículos de ley que no existan.
 
-IMPORTANTE:
-- Habla en español, de manera clara y empática.
-- Siempre aclara que tus respuestas son orientativas, no reemplazan a un abogado.
-- Sé conciso: máximo 3 párrafos."""
+Ámbito estrictamente chileno: Ley N°14.908 (alimentos), Ley N°19.968 (tribunales de familia), Código Civil chileno, Ley N°21.394 (notificaciones electrónicas)."""
 
     historial_texto = ""
     for msg in req.historial[-6:]:
@@ -338,10 +393,15 @@ IMPORTANTE:
     prompt = f"{historial_texto}Usuario: {req.mensaje}\nNEXO:"
 
     try:
-        respuesta = llamar_openai(prompt, system=system_prompt, temperatura=0.4)
+        respuesta = llamar_openai(prompt, system=system_prompt, temperatura=0.4, max_tokens=600)
+        
+        # Descontar crédito tras respuesta exitosa
+        if "demanda" not in respuesta and "ocupado" not in respuesta:
+            _descontar_credito(uid, monto=1)
+            
         return {"respuesta": respuesta.strip(), "modelo": OPENAI_MODEL}
     except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Servicio de IA no disponible: {str(e)[:100]}")
+        raise HTTPException(status_code=503, detail=f"Servicio de IA con alta carga: {str(e)[:50]}")
 
 # ─── Lógica Core del Scanner ────────────────────────────────────────────────
 def _procesar_texto_scanner(texto: str, uid: str | None = None) -> dict:
@@ -799,29 +859,17 @@ async def generar_escrito(
     uid = _user.get("uid") if _user else None
     if not uid:
         raise HTTPException(status_code=401, detail="Usuario no autenticado.")
-    user_email = _user.get("email") if _user else req.email_usuario
-    is_anonymous = False
-    if _user and _user.get("firebase", {}).get("sign_in_provider") == "anonymous":
-        is_anonymous = True
-
-    # 1. BARRERA DE PEAJE (Créditos)
-    if FIREBASE_ADMIN_OK and db is not None:
-        doc_ref = db.collection("users").document(uid)
-        doc = doc_ref.get()
-        if not doc.exists:
-            # 1 credit for anonymous, 3 for registered
-            initial_credits = 1 if is_anonymous else 3
-            doc_ref.set({"credits": initial_credits, "email": user_email, "isAnonymous": is_anonymous})
-            credits = initial_credits
+    
+    # 🔐 VALIDACIÓN HARDENING: Créditos
+    saldo = _verificar_creditos(uid, costo=1)
+    if saldo == -1:
+        is_anonymous = _user.get("firebase", {}).get("sign_in_provider") == "anonymous"
+        if is_anonymous:
+            raise HTTPException(status_code=403, detail="Has agotado tu documento gratuito. ¡Regístrate gratis para obtener más créditos!")
         else:
-            data = doc.to_dict()
-            credits = data.get("credits", 0)
-            
-        if credits <= 0:
-            if is_anonymous:
-                raise HTTPException(status_code=403, detail="Has agotado tu documento gratuito. ¡Regístrate gratis para obtener más créditos!")
-            else:
-                raise HTTPException(status_code=403, detail="Créditos insuficientes. Recarga tu cuenta para continuar.")
+            raise HTTPException(status_code=403, detail="Saldo insuficiente. Recarga créditos para generar este escrito.")
+    elif saldo == 0 and FIREBASE_ADMIN_OK:
+         raise HTTPException(status_code=403, detail="Error de cuenta: créditos no encontrados.")
 
     tipo_label = TIPOS_ESCRITO.get(req.tipo_escrito, req.tipo_escrito)
     leyes = LEYES_REFERENCIA.get(req.tipo_escrito, ["Ley N°14.908", "Ley N°19.968"])
@@ -897,9 +945,11 @@ Genera el escrito ahora:"""
 
     try:
         respuesta_raw = llamar_openai(prompt, system=system_prompt, temperatura=0.15, max_tokens=2000)
+
         json_match = re.search(r'\{[\s\S]*\}', respuesta_raw)
         if not json_match:
             raise ValueError("La IA no devolvió JSON válido")
+
         resultado = json.loads(json_match.group(0))
         
         escrito_formal_text = resultado.get("escrito_formal", "")
@@ -912,7 +962,7 @@ Genera el escrito ahora:"""
             if not any("mediación" in str(x).lower() for x in advertencias):
                 advertencias.insert(0, "¡IMPORTANTE! En Chile, para demandar rebaja de alimentos, es REQUISITO DE ADMISIBILIDAD contar con el Certificado de Mediación Frustrada. Si no lo tienes, la demanda será rechazada de plano.")
                 
-        # 2. CONSUMO (Débito)
+        # Descontar crédito y registrar transacción (una sola vez)
         if FIREBASE_ADMIN_OK and db is not None:
             user_ref = db.collection("users").document(uid)
             user_ref.update({"credits": firestore.Increment(-1)})

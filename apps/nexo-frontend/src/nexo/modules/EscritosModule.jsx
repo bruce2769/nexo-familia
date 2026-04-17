@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
-import { Document, Packer, Paragraph, TextRun } from 'docx';
-import { saveAs } from 'file-saver';
-import { jsPDF } from 'jspdf';
+
 import { doc, getDoc } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { db } from '../../firebase/config.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';
 
@@ -81,25 +80,53 @@ export default function EscritosModule() {
             }
         }
 
-        const token = localStorage.getItem('nf_token');
+        // Obtener token real de Firebase Auth
+        let token = '';
+        try {
+            const auth = getAuth();
+            if (auth.currentUser) {
+                token = await auth.currentUser.getIdToken(true);
+            }
+        } catch (tokenErr) {
+            console.warn('[Escritos] No se pudo obtener token Firebase:', tokenErr);
+        }
         const headers = { 'Content-Type': 'application/json' };
         if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        // 💡 HARDENING: Timeout de 15 segundos
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
 
         try {
             const res = await fetch(`${BACKEND_URL}/api/v1/escritos/generar`, {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ tipo_escrito: tipo.id, ...form }),
+                signal: controller.signal
             });
+            
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                const errorBody = await res.json().catch(() => ({}));
+                throw new Error(errorBody.detail || `Error ${res.status}: No se pudo generar el documento`);
+            }
+
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || 'Error generando el escrito');
             setResultado(data);
             setStep('resultado');
         } catch (err) {
-            setError(err.message === 'Failed to fetch'
-                ? `No se pudo conectar al servidor. Verifica tu conexión.`
-                : err.message
-            );
+            clearTimeout(timeoutId);
+            console.error("[Escritos] Error:", err);
+            
+            let msg = err.message;
+            if (err.name === 'AbortError') {
+                msg = "La generación está demorando demasiado. El servidor podría estar saturado. Por favor, reintenta en unos segundos.";
+            } else if (err.message === 'Failed to fetch') {
+                msg = "No se pudo conectar al servidor. Verifica tu conexión a internet.";
+            }
+            
+            setError(msg);
         } finally {
             setLoading(false);
         }
@@ -132,6 +159,9 @@ export default function EscritosModule() {
 
     const exportarWord = async () => {
         try {
+            const { Document, Packer, Paragraph, TextRun } = await import('docx');
+            const { saveAs } = await import('file-saver');
+
             const paragraphs = resultado.escrito_formal.split('\n').map(line => 
                 new Paragraph({ children: [new TextRun({ text: line, font: "Times New Roman", size: 24 })] })
             );
@@ -143,8 +173,9 @@ export default function EscritosModule() {
         }
     };
 
-    const exportarPDF = () => {
+    const exportarPDF = async () => {
         try {
+            const { jsPDF } = await import('jspdf');
             const doc = new jsPDF();
             doc.setFont("times", "normal");
             doc.setFontSize(12);
@@ -238,11 +269,11 @@ export default function EscritosModule() {
 
                     <div className="nf-row">
                         <div className="nf-field">
-                            <label className="nf-label">Tribunal (Opcional)</label>
+                            <label className="nf-label">Tribunal de la causa *</label>
                             <input className="nf-input" placeholder="Ej: 1° Juzgado de Familia de Santiago" value={form.tribunal} onChange={e => setForm(f => ({...f, tribunal: e.target.value}))} />
                         </div>
                         <div className="nf-field">
-                            <label className="nf-label">RIT de la causa (Opcional)</label>
+                            <label className="nf-label">RIT de la causa *</label>
                             <input className="nf-input" placeholder="Ej: C-1234-2024" value={form.rit} onChange={e => setForm(f => ({...f, rit: e.target.value}))} />
                         </div>
                     </div>
@@ -256,7 +287,11 @@ export default function EscritosModule() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
                         <button className="nf-btn nf-btn-ghost" onClick={reset}>← Volver</button>
-                        <button className="nf-btn nf-btn-primary" onClick={avanzarAPersonal} disabled={!form.situacion.trim()}>Siguiente: Datos Personales →</button>
+                        <button className="nf-btn nf-btn-primary" 
+                            onClick={avanzarAPersonal} 
+                            disabled={!form.situacion.trim() || !form.tribunal.trim() || !form.rit.trim()}>
+                            Siguiente: Datos Personales →
+                        </button>
                     </div>
                 </div>
             </div>

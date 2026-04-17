@@ -1,103 +1,255 @@
-# INVENTARIO Y AUDITORÍA COMPLETA — NEXO FAMILIA
-
-## 1. ANÁLISIS GENERAL
-El proyecto consiste en una plataforma web (Vite + React) y un backend (FastAPI / Python) con integraciones de IA avanzada. 
-**Estado General:** El proyecto está en fase de maduración, con un backend robusto que contiene reglas de negocio de IA, Firebase y pagos, pero con un frontend parcialmente simulado que aún no consume todos los endpoints en producción.
-
-- **Funciona completamente:** Autenticación Firebase, webhooks de pagos (Stripe, MercadoPago), análisis RAG y llamadas generativas a OpenAI, base de datos SQLite con lecturas.
-- **Funciona parcialmente:** Conexión API. El frontend tiene los contenedores y componentes UI, pero en algunos (Copiloto) usa mocking en vez de fetch real.
-- **No está implementado:** Conexión de extremo a extremo (E2E) en el chatbot, manejo estricto de JSON parse en Python, y la integración al 100% de la UI con rutas dinámicas persistentes.
+# 🔎 Auditoría Completa — Estado Actual del Proyecto «Nexo Familia»
+> Generada el 2026-04-05 | Auditada sin modificar código
 
 ---
 
-## 2. INVENTARIO POR MÓDULO (FRONTEND)
-Análisis de `/frontend/src/nexo/modules/`:
+## 1. ESTRUCTURA DEL PROYECTO (Monorepo)
 
-| Módulo | Estado | Backend conectado | Tipo de datos | Observaciones |
-|--------|--------|-------------------|---------------|---------------|
-| `CopilotoModule` | SOLO UI | ❌ No | Mocks (`localCopilot.js`) | UI completa y responsiva, pero simula la respuesta de IA localmente. |
-| `ScannerModule` | PARCIAL | ⚠️ Parcial | Mixto | UI para subir documentos, falta validar flujo completo a `/api/v1/scanner/subir`. |
-| `EscritosModule` | PARCIAL | ⚠️ Parcial | Mixto | Backend implementa `/api/v1/escritos/generar`. UI requiere enviar payload completo. |
-| `AuthModule` | FUNCIONA | ✅ Sí | Firebase | Gestor robusto de autenticación y sesiones. |
-| `CausaModule` | ROTO/UI | ❌ No | Visual Data | Requiere conexión de historiales a `/api/v1/causas/...`. |
-| `MapaJuecesModule` | PARCIAL | ✅ Sí | Reales (SQLite)| Consume `fetch` sobre endpoints `/api/v1/analytics/*`. |
-| `CalculadoraModule` | FUNCIONA | ❌ N/A | Local (Matemática) | Flujo completo de negocio en el navegador (calcula multas y pensiones). |
+```
+nexo-platform/
+├── apps/
+│   ├── nexo-frontend/          ← App principal (Vite + React)
+│   ├── nexo-backend/           ← Backend Python FastAPI (Railway)
+│   ├── nexo-node-backend/      ← Backend Node.js / Playwright (Railway)
+│   └── nexo-dashboard-legacy/  ← Dashboard viejo (separado, sin integrar)
+├── packages/
+│   ├── ai-engine/              ← Paquete compartido (estado desconocido)
+│   └── scraper/                ← Paquete scraper (estado desconocido)
+├── firestore.rules
+└── auditoria_nexo_familia.md
+```
 
----
-
-## 3. INVENTARIO BACKEND
-El backend principal (`nexo-backend/main.py`) cuenta con una extensa lista de funcionales endpoints en FastAPI:
-
-- **Operativos (Usados):**
-  - `/health`, `/api/health`
-  - `/api/v1/analytics/velocidad`, `estacionalidad`, `kpis`, `materias` (Reportes SQLite).
-  - Webhooks de pagos y creación de Checkout Sessions (`Stripe`/`MercadoPago`).
-  - `/api/v1/users/init` (Inicializa créditos/perfiles Firebase).
-
-- **Endpoints No Utilizados o Incompletos (Falta conexión frontal E2E):**
-  - `/api/v1/copiloto`
-  - `/api/v1/scanner/analizar`, `/api/v1/scanner/subir`
-  - `/api/v1/causas/procesar`, `/api/v1/causas/mis-causas`
-  - `/api/v1/escritos/generar`, `/api/v1/escritos/tipos`, `/api/v1/escritos/history/...`
-
-- **Código Muerto/Inconsistencias:**
-  - Tolerancia de error silenciosa con `ReportLab` y `docx`. Si no están instalados por dependencias perdidas, retornan strings vacíos.
+**Observaciones:**
+- No hay `package.json` raíz de monorepo (ni `pnpm-workspace.yaml` ni Turborepo config). No es un monorepo real con workspace linking; es un "multi-repo" dentro de la misma carpeta.
+- `nexo-dashboard-legacy` existe como app independiente sin evidencia de integración con el frontend principal.
+- `packages/ai-engine` y `packages/scraper` no se ven importados por el frontend.
+- Se detectó `index_final.html` duplicado en `apps/nexo-frontend/` (archivo huérfano).
 
 ---
 
-## 4. FLUJOS CRÍTICOS
-- **Generación de Escritos Legales (`/escritos/generar`):** 
-  - ✅ Entiende el caso, formatea como "Suma" judicial. 
-  - ⚠️ Puede devolver 503 si `OpenAI` genera un JSON desformateado, dado que usa Regex básico `r'\{[\s\S]*\}'`.
-- **Subida de PDF y Diagnóstico (`/scanner/subir`):** 
-  - ✅ Capacidad de PyMuPDF. Si falla extrae visión OCR usando `llamar_openai_vision()`.
-  - ⚠️ Si se envían archivos PDF muy masivos o corrompidos, el fallo se absorbe como HTTPException 500, bloqueando la interfaz para el usuario.
-- **Copiloto IA:**
-  - ⚠️ Backend preparado pero Frontend desconectado. Falta un puente.
+## 2. FRONTEND
+
+### Arquitectura
+- **Framework:** Vite 5 + React 18 + JSX  
+- **Entry point:** `src/main.jsx` → `src/nexo/NexoApp.jsx`
+- **Routing:** Tab-based sin React Router (estado `activeTab`). Funciona correctamente para SPA.
+- **Módulos (16 total):** DiagnosticoModule (eager), + 12 lazy-loaded, + AuthModule, MapaJuecesModule y DocumentosModule presentes en disco pero **DocumentosModule** no está en el switch de rutas.
+
+### Navegación
+- **Sidebar:** Menú lateral completo con todos los tabs (desktop). ✅
+- **BottomNav:** Barra inferior mobile con 5 tabs (Inicio, Diagnosticar, Escritos, Copiloto, Perfil). ✅
+- **Topbar:** Presente, implementado. ✅
+
+### Problemas detectados
+| # | Archivo | Problema |
+|---|---------|----------|
+| 1 | `src/nexo/components/CreditBanner.jsx` | **VACÍO** (0 bytes). Importación posible causaría error en runtime. |
+| 2 | `src/main.jsx` | Desregistra **todos** los Service Workers en cada boot (`registration.unregister()`) — destruye el cacheo PWA en cada carga. Anti-patrón grave. |
+| 3 | `index_final.html` | Archivo HTML duplicado en raíz del frontend. No se usa, puede confundir. |
+| 4 | `DocumentosModule.jsx` | Existe en disco (~17KB) pero **no está mapeado en ningún tab** ni en `NexoApp.jsx`. |
+| 5 | `App.jsx` | Tiene 53KB — archivo muy grande, sugiere código legacy mezclado. |
 
 ---
 
-## 5. SISTEMA IA
-- **OpenAI Integrado:** Usa `gpt-4o-mini` por defecto para todas las llamadas, y OpenAI Vision para OCR fallback ("subir un JPG o PDF con imágenes").
-- **Costos/Rate Limits:** Bien administrado. Límite de 20 por minuto global, y control diario de consumos pagados vía "Créditos" (billetera Firebase).
-- **Fallos en Prompting:** Confía en que GPT devuelva siempre el formato JSON exacto sin usar `response_format`. Este es el punto de quiebre más inestable.
+## 3. COPILOTO IA — BUG CRÍTICO 🚨
+
+### Flujo actual
+```
+Frontend (CopilotoModule.jsx) → POST /api/v1/copiloto
+                                  body: { message: "..." }   ← campo "message"
+
+Backend (main.py, línea 308) → CopilotoRequest(mensaje: str) ← campo "mensaje"
+```
+
+**El frontend envía `message`, el backend espera `mensaje`.**  
+Esto provoca que Pydantic rechace la petición con `422 Unprocessable Entity`.  
+**El Copiloto NO funciona en producción.**
+
+### Otros problemas del Copiloto
+- La UI muestra "GPT-4o Mini — Activo" siempre en el header, incluso antes de hacer una petición. El estado `iaOnline` inicia en `true` pero puede ser `false` tras un error.
+- El historial de conversación no se envía al backend (el campo `historial: []` siempre vacío). El backend tiene soporte para `historial` pero el frontend no lo construye.
 
 ---
 
-## 6. SISTEMA DE CACHE
-- **Arquitectura Activa:** ✅ Sí, usando Firestore (`db.collection("cache_ia")`). 
-- **Mecánica Inteligente:** Extrae texto PDF -> recorta primeros 800 chars -> hashea con MD5 -> consulta Firestore.
-- Si hay un HIT de caché: Ahorra llamada a OpenAI. 
-- *Conclusión:* Funciona perfectamente como mecanismo de optimización, previniendo gastos masivos al subir el mismo modelo de sentencia.
+## 4. ESCRITOS LEGALES — PROBLEMA DE AUTENTICACIÓN ⚠️
+
+### Flujo actual
+```
+Frontend (EscritosModule.jsx) → localStorage.getItem('nf_token')
+                                 → POST /api/v1/escritos/generar
+                                   Authorization: Bearer <token_localStorage>
+
+Backend → Depends(verify_firebase_token) → verifica token Firebase real
+```
+
+**El frontend obtiene el token de `localStorage` (clave `nf_token`)**, pero en ninguna parte del código de auth se guarda un token en esa clave (el `AuthContext` usa Firebase nativo, no localStorage manual).  
+Esto provoca que el endpoint de escritos reciba un `Bearer undefined` o vacío, y el backend retorna `401 Unauthorized`.
+
+**Los escritos no se generan para usuarios autenticados.**
+
+### Lo que sí funciona
+- La UI de selección de tipo, formulario causa y datos personales funciona correctamente.
+- La validación de RUT está bien implementada.
+- La exportación PDF y DOCX (una vez obtenido el resultado) funciona en cliente.
 
 ---
 
-## 7. SEGURIDAD Y ERRORES
-- **Tolerancia a Fallos:** Intermedia.
-- **Autenticación Fuerte:** Firebase `verify_id_token` aplicado universalmente como middleware/dependencia (`_bearer_scheme`).
-- **Limpieza de PII (Datos Personales):** Tiene la función `pseudo_anonimizar()` con Regex para ocultar el RUT, pero falla en enmascarar posibles nombres completos insertados en las sentencias de Familia.
+## 5. BACKEND PYTHON (FastAPI — Railway)
+
+### Endpoints detectados
+| Endpoint | Estado |
+|----------|--------|
+| `GET /health` | ✅ Funcional |
+| `GET /api/health` | ✅ Funcional |
+| `POST /api/v1/copiloto` | ❌ Bug: recibe `message` espera `mensaje` |
+| `POST /api/v1/escritos/generar` | ❌ Bug: token siempre vacío desde frontend |
+| `POST /api/v1/scanner/analizar` | ⚠️ Funciona, pero requiere Firebase Admin activo |
+| `POST /api/v1/scanner/subir` | ⚠️ Ídem |
+| `GET /api/v1/analytics/*` | ✅ Funciona si SQLite está disponible |
+| `POST /api/v1/causas/procesar` | ⚠️ Requiere Firebase + OpenAI |
+| `GET /api/v1/causas/mis-causas` | ⚠️ Requiere Firebase |
+| `POST /api/v1/sentencias/subir` | ⚠️ Requiere Firebase + OpenAI |
+
+### Variables de entorno en railway (según .env.example)
+| Variable | Estado |
+|----------|--------|
+| `OPENAI_API_KEY` | No visible localmente (debe estar en Railway) |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Vacío en `.env` local; debe estar en Railway |
+| `STRIPE_SECRET_KEY` | No configurada → fallback a `sk_test_dummy` |
+| `MERCADOPAGO_ACCESS_TOKEN` | No configurada → fallback a `TEST-dummy` |
+| `ALLOWED_ORIGINS` | Solo `localhost` en local |
+
+### Problemas de diseño
+- `main.py` tiene **1.286 líneas** — monolítico, difícil de mantener.
+- CORS configurado con `allow_origins=["*"]` + `allow_credentials=False`. Funciona pero es permisivo.
+- La DB SQLite (`causas_judiciales.db` 17MB) se lee en Railway. Si Railway reinicia el contenedor, los datos de SQLite se pierden (Railway no tiene filesystem persistente por defecto).
 
 ---
 
-## 8. DEPLOY Y CONFIGURACIÓN
-- **Variables Críticas:** Dependencia excesiva de variables (`FIREBASE_SERVICE_ACCOUNT_JSON`, `OPENAI_API_KEY`, etc). Railway falla muchas veces manejando `\n` en keys JSON, pero el código incluye una mitigación robusta con `replace('\n', '\\n')` para evadir este bug crónico.
-- **Manejo SQLite en Producción:** `causas_judiciales.db` (17MB+) está incluido en el repo original. Esto significa que si este contendor es reiniciado por Vercel/Railway, los datos no persistirán (o no deben ser modificados si se pretende que persistan sin un volumen docker).
+## 6. BACKEND NODE.JS (Express — Railway)
+
+- Tiene Playwright instalado → scraper del Poder Judicial.
+- `serviceAccountKey.json` está en el directorio raíz del proyecto (posible riesgo de seguridad si no está en `.gitignore`).
+- Su funcionalidad no es directamente visible desde la UI actual (no hay tab de Radar Judicial en NexoApp, fue eliminado según comentario en el código).
+- La variable `VITE_NEXO_NODE_URL` apunta a Railway pero el frontend no la usa en ningún módulo activo visible.
 
 ---
 
-## 9. BRECHAS CRÍTICAS
+## 7. VARIABLES DE ENTORNO
 
-### 🔴 CRÍTICO (Rompe funcionalidad a ojos de usuario)
-- **El Frontend "engaña":** `CopilotoModule` y similares simulan funcionamiento asíncrono con `simulateCopilotResponse`. Estos deben vincularse de inmediato al backend real `/api/v1/copiloto` enviando el Bearer Token real.
-- **Desencuentro de JSON:** En `_procesar_texto_scanner`, el regex fallará el 5% de veces que OpenAI incluya ticks invertidos de markdown alrededor del JSON block (ej. ` ```json {...} ``` `).
+### Frontend (`nexo-frontend/.env`)
+| Variable | Estado |
+|----------|--------|
+| `VITE_FIREBASE_*` | ✅ Todas configuradas con valores reales |
+| `VITE_NEXO_BACKEND_URL` | ✅ Apunta a Railway Python |
+| `VITE_API_URL` | ⚠️ Duplicada con `VITE_NEXO_BACKEND_URL` (misma URL) |
+| `VITE_NEXO_NODE_URL` | ⚠️ Configurada pero no usada activamente |
 
-### 🟠 IMPORTANTE (Afecta calidad / Robustez)
-- **Base de datos efímera:** Si los usuarios guardan analytics de forma regular (no parece ser el caso, al ser analytics más estático), perderían data en Railway. Sin embargo, para `users`, `cache_ia` y `escritos` se usa Firestore, por lo que **esto es seguro**.
+**Advertencia:** El archivo `.env` con claves reales de Firebase está en el repositorio. Debe estar en `.gitignore`.
 
-### 🟡 MEJORAS (No urgente)
-- **JSON Object API OpenAI:** Pasar la llamada de openai a usar `response_format={ "type": "json_object" }`. Esto elimina la necesidad de `regex` y asegura un 100% de fiabilidad en el parseo estructurado de respuestas legales.
+### Compatibilidad con Vercel
+- El frontend usa `import.meta.env.VITE_*` correctamente. ✅
+- Las variables deben configurarse en el panel de Vercel (Environment Variables).
+- No hay `api/` serverless functions en el frontend — todo el backend está en Railway.
 
 ---
 
-## 10. RESULTADO FINAL
-El sistema base (Node UI / Python Backend) está fuertemente consolidado. El **75% del trabajo pesado (Backend + IA + Cache + Pagos) está terminado y correctamente escrito**. Lo que falta es puramente "la última milla": cablear los módulos de UI (React) con la API REST ya desarrollada en `/api/v1/...`, y robustecer el parseo de respuestas de OpenAI.
+## 8. PWA
+
+| Item | Estado |
+|------|--------|
+| `vite-plugin-pwa` configurado | ✅ |
+| `manifest.json` generado por Vite | ✅ (en memoria, no archivo separado) |
+| Icons completos en `public/` | ✅ (64x64, 192x192, 512x512, maskable) |
+| `apple-touch-icon` | ✅ |
+| `theme-color` y `background_color` | ✅ |
+| Service Worker | ❌ `main.jsx` lo desregistra en cada boot |
+| Instalación en móvil | ⚠️ Posible pero SW se elimina al cargar |
+
+**El Service Worker se desregistra en cada carga** (`navigator.serviceWorker.getRegistrations().then(r => r.unregister())`). Esto impide el uso offline y la instalación estable como PWA.
+
+---
+
+## 9. BUILD
+
+> No se ejecutó `npm run build` en esta auditoría (instrucción: no modificar). Sin embargo, se pueden anticipar los siguientes riesgos:
+
+| Riesgo | Severidad |
+|--------|-----------|
+| `CreditBanner.jsx` vacío (0 bytes) podría causar error de importación si es importado en algún módulo | Alta |
+| `electron` en devDependencies podría generar warnings en build web | Media |
+| `App.jsx` de 53KB con código potencialmente legacy | Media |
+| Dependencias Electron (`electron-builder`, `concurrently`) en un proyecto web-only | Baja |
+
+---
+
+## 10. LIMPIEZA
+
+| Elemento | Acción sugerida |
+|----------|-----------------|
+| `index_final.html` | Eliminar (duplicado) |
+| `DocumentosModule.jsx` | Integrar o eliminar |
+| `nexo-dashboard-legacy/` | Evaluar si tiene valor; si no, eliminar |
+| `packages/ai-engine/` y `packages/scraper/` | Evaluar uso real |
+| `App.jsx` (53KB) | Revisar si tiene código activo o es legacy |
+| `VITE_API_URL` | Consolidar con `VITE_NEXO_BACKEND_URL` |
+| `serviceAccountKey.json` en node-backend | Mover a variable de entorno |
+| `.env` con datos reales | Asegurar en `.gitignore` |
+
+---
+
+## DIAGNÓSTICO FINAL
+
+### ✅ Qué funciona correctamente
+- Estructura del frontend (Vite + React + módulos lazy)
+- Firebase Auth (login, registro, anónimo)
+- Sidebar + BottomNav (navegación desktop y mobile)
+- Módulos: Diagnóstico, Calculadora, Riesgo, Glosario, Guías, Historial, Muro (Comunidad)
+- Backend health endpoints `/health` y `/api/health`
+- Analytics SQLite (velocidad tribunales, materias, KPIs)
+- PWA manifest e icons correctamente configurados
+- Configuración Vercel (`vercel.json` con SPA rewrite)
+- Variables de entorno Firebase cargadas correctamente
+
+### ⚠️ Qué funciona parcialmente
+- **Scanner:** Funciona si Firebase Admin está activo en Railway y OPENAI_API_KEY configurada
+- **Módulo Causa:** Depende de Firebase Admin en backend
+- **PWA offline:** No opera como PWA real (SW se destruye en cada carga)
+- **Módulo Estado (Mis Causas):** Funciona si Firebase está operativo
+- **Copiloto — UI:** Carga bien visualmente, pero las respuestas fallan
+
+### ❌ Qué está roto
+1. **Copiloto IA:** Campo `message` (frontend) vs `mensaje` (backend) → `422 Unprocessable Entity` en cada consulta
+2. **Escritos Legales:** Token de autorización vacío (usa `localStorage.getItem('nf_token')` que nunca se escribe) → `401 Unauthorized`
+3. **Service Worker PWA:** Se desregistra en cada boot → sin cacheo ni modo offline
+4. `CreditBanner.jsx` está vacío (0 bytes) → posible crash si se importa
+
+### 🧹 Qué se debe eliminar / limpiar
+- `index_final.html` (duplicado)
+- `App.jsx` legacy (53KB, evaluar contenido)
+- `nexo-dashboard-legacy/` app sin uso activo
+- Variable duplicada `VITE_API_URL`
+- Script de desregistro de SW en `main.jsx`
+- Dependencias Electron en frontend web: `electron`, `electron-builder`, `wait-on`
+- `serviceAccountKey.json` fuera de variables de entorno
+
+### 🚀 Qué falta para producción
+
+| Tarea | Prioridad |
+|-------|-----------|
+| **Fix campo `message` → `mensaje`** en Copiloto (frontend o backend) | 🔴 Crítica |
+| **Fix token de auth** en EscritosModule (usar `getIdToken()` de Firebase) | 🔴 Crítica |
+| **Eliminar desregistro de SW** en `main.jsx` | 🔴 Crítica |
+| Confirmar `OPENAI_API_KEY` configurada en Railway | 🔴 Crítica |
+| Confirmar `FIREBASE_SERVICE_ACCOUNT_JSON` en Railway | 🔴 Crítica |
+| Migrar SQLite a Firestore o PostgreSQL (Railway no tiene filesystem persistente) | 🟠 Alta |
+| Completar `CreditBanner.jsx` o eliminar referencias | 🟠 Alta |
+| Integrar o eliminar `DocumentosModule.jsx` | 🟡 Media |
+| Limpiar dependencias Electron del package.json frontend | 🟡 Media |
+| Configurar `.gitignore` para excluir `.env` con datos reales | 🟡 Media |
+| Tests automáticos (ninguno detectado) | 🟡 Media |
+| Separar `main.py` en routers modulares | 🟢 Baja |
+
+---
+
+*Auditoría realizada por inspección estática de código. No se ejecutaron comandos de build ni se verificó el estado en tiempo real de Railway.*

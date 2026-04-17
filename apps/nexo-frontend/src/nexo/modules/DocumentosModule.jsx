@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { jsPDF } from "jspdf";
-import { saveAs } from "file-saver";
-import { Document, Packer, Paragraph } from "docx";
+
 
 const DOCUMENT_TYPES = [
     {
@@ -119,8 +117,9 @@ export default function DocumentosModule() {
         }
     };
 
-    const descargarPDF = () => {
+    const descargarPDF = async () => {
         if (!generated || !doc) return;
+        const { jsPDF } = await import('jspdf');
         const pdf = new jsPDF();
 
         pdf.setFont("Times", "Normal");
@@ -137,6 +136,8 @@ export default function DocumentosModule() {
 
     const descargarWord = async () => {
         if (!generated || !doc) return;
+        const { Document, Packer, Paragraph } = await import('docx');
+        const { saveAs } = await import('file-saver');
 
         const docx = new Document({
             sections: [{

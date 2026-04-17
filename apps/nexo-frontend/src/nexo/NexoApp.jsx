@@ -1,5 +1,6 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
 import './nexo.css';
+import Loader from './components/Loader.jsx';
 import Sidebar from './components/Sidebar.jsx';
 import BottomNav from './components/BottomNav.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
@@ -7,31 +8,29 @@ import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx';
 import Topbar from './components/Topbar.jsx';
 
 // ── Lazy Loading on Secondary Modules ──
-const CausaModule = lazy(() => import('./modules/CausaModule.jsx'));
-const RiesgoModule = lazy(() => import('./modules/RiesgoModule.jsx'));
 const MuroModule = lazy(() => import('./modules/MuroModule.jsx'));
 const GuiasModule = lazy(() => import('./modules/GuiasModule.jsx'));
 const GlosarioModule = lazy(() => import('./modules/GlosarioModule.jsx'));
 const HistorialModule = lazy(() => import('./modules/HistorialModule.jsx'));
 const ScannerModule = lazy(() => import('./modules/ScannerModule.jsx'));
-const EstadoModule = lazy(() => import('./modules/EstadoModule.jsx'));
 const CalculadoraModule = lazy(() => import('./modules/CalculadoraModule.jsx'));
 const AuthModule = lazy(() => import('./modules/AuthModule.jsx'));
 const CopilotoModule = lazy(() => import('./modules/CopilotoModule.jsx'));
 const EscritosModule = lazy(() => import('./modules/EscritosModule.jsx'));
+const DocumentosModule = lazy(() => import('./modules/DocumentosModule.jsx'));
+const AllModulesModule = lazy(() => import('./modules/AllModulesModule.jsx'));
 
 // ── Radar Judicial eliminado (requiere integración real con Poder Judicial) ──
 
 const TABS = [
     { id: 'diagnostico', label: '⚖️ Diagnóstico', highlight: true },
+    { id: 'all_modules', label: '🛠️ Herramientas', highlight: true },
     { id: 'copiloto', label: '🤖 Abogado IA 24/7', highlight: true },
-    { id: 'causa', label: '📋 Causa' },
     { id: 'calculadora', label: '🧮 Calculadora Financiera' },
     { id: 'muro', label: '🤝 Comunidad' },
-    { id: 'riesgo', label: '⚠️ Riesgo' },
-    { id: 'estado', label: '📌 Mis Causas' },
     { id: 'scanner', label: '🔍 Escáner' },
-    { id: 'escritos', label: '📝 Escritos Legales', highlight: true },
+    { id: 'escritos', label: '📝 Escritos IA', highlight: true },
+    { id: 'documentos', label: '📄 Documentos Pro', highlight: true },
     { id: 'guias', label: '📚 Guías' },
     { id: 'glosario', label: '📖 Glosario' },
     { id: 'historial', label: '🕐 Historial' }
@@ -46,7 +45,7 @@ export default function NexoApp() {
 }
 
 function NexoAppContent() {
-    const { currentUser } = useAuth();
+    const { currentUser, credits } = useAuth();
     const [activeTab, setActiveTab] = useState('diagnostico');
     const [showOnboarding, setShowOnboarding] = useState(false);
 
@@ -66,36 +65,23 @@ function NexoAppContent() {
         window.scrollTo({ top: 0, behavior: 'smooth' });
     };
 
-    const LoadingFallback = () => (
-        <div style={{ padding: '40px', textAlign: 'center', color: '#94a3b8' }}>
-            <div style={{
-                width: 40,
-                height: 40,
-                border: '3px solid #334155',
-                borderTopColor: '#3b82f6',
-                borderRadius: '50%',
-                animation: 'nf-spin 1s linear infinite',
-                margin: '0 auto 16px'
-            }} />
-            Cargando módulo...
-        </div>
-    );
+// ...
+    const LoadingFallback = () => <Loader />;
 
     const renderModule = () => {
         switch (activeTab) {
             case 'diagnostico':  return <DiagnosticoModule onNavigate={navigate} />;
-            case 'causa':        return <CausaModule />;
             case 'calculadora':  return <CalculadoraModule />;
-            case 'riesgo':       return <RiesgoModule />;
-            case 'estado':       return <EstadoModule />;
             case 'scanner':      return <ScannerModule />;
             case 'escritos':     return <EscritosModule />;
+            case 'documentos':   return <DocumentosModule />;
             case 'muro':         return <MuroModule />;
             case 'guias':        return <GuiasModule />;
             case 'glosario':     return <GlosarioModule />;
             case 'historial':    return <HistorialModule onNavigate={navigate} />;
             case 'auth':         return <AuthModule onNavigate={navigate} />;
             case 'copiloto':     return <CopilotoModule />;
+            case 'all_modules':  return <AllModulesModule onNavigate={navigate} />;
             default:             return <DiagnosticoModule onNavigate={navigate} />;
         }
     };
@@ -107,7 +93,7 @@ function NexoAppContent() {
 
     return (
         <div className="nf-app-layout">
-            <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} />
+            <Sidebar tabs={APP_TABS} activeTab={activeTab} onTabChange={navigate} credits={credits} />
 
             <div className="nf-content-wrapper">
                 <Topbar onNavigate={navigate} />
@@ -127,15 +113,14 @@ function NexoAppContent() {
                         <div className="nf-modal-icon">⚖️</div>
                         <h2 className="nf-modal-title">Bienvenido a Nexo Familia</h2>
                         <p className="nf-modal-desc">
-                            La primera plataforma de inteligencia legal para causas de familia en Chile.
-                            Interpreta tu causa, calcula tu impacto financiero, evalúa tu riesgo y genera documentos legales.
+                            La primera plataforma de inteligencia legal de familia en Chile.
+                            Analiza tu situación, calcula tu impacto financiero, evalúa tu riesgo y genera documentos legales.
                         </p>
                         <div className="nf-modal-features">
                             <div className="nf-modal-feature"><span>⚖️</span> Diagnóstico inteligente guiado</div>
                             <div className="nf-modal-feature"><span>🧮</span> Calculadora de pensión (IPC)</div>
-                            <div className="nf-modal-feature"><span>📋</span> Interpreta causas judiciales</div>
-                            <div className="nf-modal-feature"><span>⚠️</span> Evalúa tu nivel de riesgo</div>
-                            <div className="nf-modal-feature"><span>📝</span> Genera documentos legales</div>
+                            <div className="nf-modal-feature"><span>📝</span> Genera escritos legales con IA</div>
+                            <div className="nf-modal-feature"><span>🔍</span> Escáner IA de documentos</div>
                             <div className="nf-modal-feature"><span>🤝</span> Comunidad de apoyo anónima</div>
                         </div>
                         <button

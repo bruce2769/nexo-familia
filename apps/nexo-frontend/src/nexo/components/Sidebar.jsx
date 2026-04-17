@@ -1,6 +1,7 @@
 import React from 'react';
+import CreditBanner from './CreditBanner.jsx';
 
-export default function Sidebar({ tabs, activeTab, onTabChange }) {
+export default function Sidebar({ tabs, activeTab, onTabChange, credits }) {
     return (
         <aside className="nf-sidebar">
             <div className="nf-sidebar-header">
@@ -20,6 +21,10 @@ export default function Sidebar({ tabs, activeTab, onTabChange }) {
                         {tab.label}
                     </button>
                 ))}
+            </div>
+
+            <div style={{ padding: '0 16px' }}>
+                <CreditBanner credits={credits} onNavigate={onTabChange} />
             </div>
 
             <div className="nf-sidebar-footer">

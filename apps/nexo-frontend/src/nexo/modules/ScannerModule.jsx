@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { auth } from '../../firebase/config';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 console.log('🔗 API URL:', BACKEND_URL);
@@ -36,27 +37,42 @@ export default function ScannerModule() {
             if (method === 'text') console.log("Texto procesado:", text.substring(0, 100) + "...");
             else console.log("Texto procesado: [Se procesará en el backend vía OCR o PyMuPDF...]");
 
-            const token = localStorage.getItem("nf_token");
             const headers = {};
-            if (token) {
-                 headers['Authorization'] = `Bearer ${token}`;
+            if (auth.currentUser) {
+                const token = await auth.currentUser.getIdToken();
+                headers['Authorization'] = `Bearer ${token}`;
             }
+
+            // 💡 HARDENING: Timeout de 15 segundos
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 15000);
 
             const res = await fetch(`${BACKEND_URL}/causas/procesar`, {
                 method: 'POST',
                 headers,
                 body: formData,
+                signal: controller.signal
             });
 
+            clearTimeout(timeoutId);
+
+            if (!res.ok) {
+                const errorBody = await res.json().catch(() => ({}));
+                throw new Error(errorBody.detail || errorBody.error || `Error ${res.status}: Fallo al procesar el documento`);
+            }
+
             const data = await res.json();
-            if (!res.ok) throw new Error(data.detail || data.error || 'Error desconocido del servidor');
             
             console.log("JSON extraído:", data);
             setResult(data);
         } catch (err) {
-            const msg = err.message === 'Failed to fetch'
-                ? `Error de conexión: no se pudo contactar el servidor (${BACKEND_URL}). Verifica tu conexión o intenta más tarde.`
-                : err.message;
+            console.error("[Scanner] Error:", err);
+            let msg = err.message;
+            if (err.name === 'AbortError') {
+                msg = "El análisis está tardando demasiado (Timeout). Intenta con un texto más breve o reintenta ahora.";
+            } else if (err.message === 'Failed to fetch') {
+                msg = `Error de conexión: no se pudo contactar el servidor (${BACKEND_URL}).`;
+            }
             setError(msg);
         } finally {
             setLoading(false);
@@ -68,7 +84,7 @@ export default function ScannerModule() {
     return (
         <div>
             <div className="nf-module-header nf-animate-in">
-                <h1>🔍 Escáner Universal de Causas</h1>
+                <h1>🔍 Escáner IA de Documentos</h1>
                 <p>Extrae y guarda información legal estructurada desde cualquier formato.</p>
             </div>
 
@@ -83,11 +99,8 @@ export default function ScannerModule() {
                     </div>
 
                     <div className="nf-type-selector" style={{ marginBottom: 20 }}>
-                        <button type="button" className={`nf-type-option${method === 'pdf' ? ' active' : ''}`} onClick={() => {setMethod('pdf'); setFile(null);}}>
-                            <span>📄</span> Subir PDF
-                        </button>
-                        <button type="button" className={`nf-type-option${method === 'image' ? ' active' : ''}`} onClick={() => {setMethod('image'); setFile(null);}}>
-                            <span>📸</span> Subir Imagen (OCR)
+                        <button type="button" className={`nf-type-option${method !== 'text' ? ' active' : ''}`} onClick={() => {setMethod('pdf'); setFile(null);}}>
+                            <span>📁</span> Subir Archivo (PDF/Fotos)
                         </button>
                         <button type="button" className={`nf-type-option${method === 'text' ? ' active' : ''}`} onClick={() => setMethod('text')}>
                             <span>📝</span> Pegar Texto
@@ -95,26 +108,31 @@ export default function ScannerModule() {
                     </div>
 
                     <div className="nf-form">
-                        {(method === 'pdf' || method === 'image') ? (
+                        {(method !== 'text') ? (
                             <div className="nf-field">
-                                <label className="nf-label">{method === 'pdf' ? 'Sube tu resolución en PDF' : 'Sube o toma una foto del documento'}</label>
-                                <div style={{ border: '2px dashed var(--nf-border)', padding: '30px 20px', textAlign: 'center', borderRadius: 12, background: 'var(--nf-bg-secondary)', cursor: 'pointer', transition: 'all 0.2s' }} className="nf-upload-zone hover-border">
+                                <label className="nf-label">Selecciona tu documento (Resolución, Acta, Demanda...)</label>
+                                <div style={{ border: '2px dashed var(--nf-border)', padding: '40px 20px', textAlign: 'center', borderRadius: 12, background: 'var(--nf-bg-secondary)', cursor: 'pointer', transition: 'all 0.2s' }} className="nf-upload-zone hover-border">
                                     <input 
                                         type="file" 
-                                        accept={method === 'pdf' ? ".pdf" : "image/*"} 
-                                        capture={method === 'image' ? "environment" : undefined}
-                                        onChange={e => setFile(e.target.files[0])} 
+                                        accept="image/*,application/pdf" 
+                                        onChange={e => {
+                                            const f = e.target.files[0];
+                                            if (f) {
+                                                setFile(f);
+                                                setMethod(f.type.includes('pdf') ? 'pdf' : 'image');
+                                            }
+                                        }} 
                                         style={{ display: 'none' }} 
                                         id="file-upload"
                                     />
                                     <label htmlFor="file-upload" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, width: '100%' }}>
-                                        <span style={{ fontSize: 36 }}>{file ? '✅' : (method === 'pdf' ? '📤' : '📷')}</span>
-                                        <span style={{ fontWeight: 500, fontSize: 16, color: file ? 'var(--nf-primary)' : 'inherit' }}>
-                                            {file ? file.name : (method === 'pdf' ? 'Haz clic aquí para seleccionar un PDF' : 'Haz clic aquí para tomar o subir una foto')}
+                                        <span style={{ fontSize: 42 }}>{file ? (method === 'pdf' ? '📕' : '📸') : '📤'}</span>
+                                        <span style={{ fontWeight: 600, fontSize: 17, color: file ? 'var(--nf-primary)' : 'inherit' }}>
+                                            {file ? file.name : 'Haz clic para seleccionar PDF o Foto'}
                                         </span>
-                                        {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>{method === 'pdf' ? 'Solo archivos .pdf' : 'Soportado: JPG, PNG, WEBP'}</span>}
+                                        {!file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>Soportado: PDF, JPG, PNG, WEBP</span>}
                                         {file && <span style={{ fontSize: 13, color: 'var(--nf-text2)' }}>
-                                            {file.size > 1024 * 1024 ? (file.size / 1024 / 1024).toFixed(2) + ' MB' : (file.size / 1024).toFixed(1) + ' KB'} — Haz clic para cambiar archivo
+                                            {(file.size / 1024 / 1024).toFixed(2)} MB — Toca para cambiar
                                         </span>}
                                     </label>
                                 </div>
@@ -165,7 +183,7 @@ export default function ScannerModule() {
                         <div className="nf-card-header">
                             <div className="nf-card-icon purple" style={{ fontSize: 24, width: 48, height: 48 }}>⚖️</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Causa: {result.rit || 'Desconocido'}</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Expediente: {result.rit || 'Desconocido'}</div>
                                 <div className="nf-card-subtitle">{result.tribunal || 'Tribunal no listado'}</div>
                             </div>
                         </div>
@@ -193,7 +211,7 @@ export default function ScannerModule() {
                         <div className="nf-card-header">
                             <div className="nf-card-icon green" style={{ fontSize: 24, width: 48, height: 48 }}>👥</div>
                             <div>
-                                <div className="nf-card-title" style={{ fontSize: 18 }}>Partes de la Causa</div>
+                                <div className="nf-card-title" style={{ fontSize: 18 }}>Partes del Documento</div>
                             </div>
                         </div>
                         <div style={{ display: 'flex', gap: 20, marginTop: 10, flexWrap: 'wrap' }}>

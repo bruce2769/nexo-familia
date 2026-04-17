@@ -14,7 +14,7 @@ export function saveToHistorial(entry) {
 }
 
 const TYPE_META = {
-    causa: { icon: '📋', label: 'Causa', color: 'purple' },
+    scanner: { icon: '🔍', label: 'Escáner', color: 'purple' },
     financiero: { icon: '💰', label: 'Financiero', color: 'blue' },
     riesgo: { icon: '🚦', label: 'Riesgo', color: 'green' },
     escritos: { icon: '📝', label: 'Escritos', color: 'red' },
@@ -35,9 +35,26 @@ export default function HistorialModule({ onNavigate }) {
         setHistorial(localH);
 
         if (currentUser && !currentUser.isAnonymous) {
-            fetch(`${BACKEND_URL}/api/v1/escritos/history/${currentUser.uid}`)
-                .then(res => res.json())
-                .then(data => {
+            const fetchHistory = async () => {
+                try {
+                    const token = await currentUser.getIdToken();
+                    
+                    // 💡 HARDENING: Timeout de 15 segundos
+                    const controller = new AbortController();
+                    const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+                    const res = await fetch(`${BACKEND_URL}/api/v1/escritos/history/${currentUser.uid}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`
+                        },
+                        signal: controller.signal
+                    });
+
+                    clearTimeout(timeoutId);
+
+                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                    const data = await res.json();
                     if (Array.isArray(data)) {
                         const backendH = data.map(d => ({
                             id: d.id,
@@ -53,14 +70,15 @@ export default function HistorialModule({ onNavigate }) {
                             fromBackend: true
                         }));
                         setHistorial(prev => {
-                            // Merge and strictly sort by date descending or just map appending
                             const combined = [...prev.filter(x => !x.fromBackend), ...backendH];
-                            // Try sorting by pseudo date id or keep backend list on top
                             return combined.sort((a, b) => b.id > a.id ? 1 : -1); 
                         });
                     }
-                })
-                .catch(err => console.error("Could not fetch remote history", err));
+                } catch (err) {
+                    console.error("Could not fetch remote history", err);
+                }
+            };
+            fetchHistory();
         }
     }, [currentUser]);
 

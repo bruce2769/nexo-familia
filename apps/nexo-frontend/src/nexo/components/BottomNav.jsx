@@ -1,12 +1,13 @@
 import React from 'react';
-import { Home, ClipboardList, PenTool, MessageSquare, User } from 'lucide-react';
+import { Home, ClipboardList, PenTool, MessageSquare, User, Layers } from 'lucide-react';
 
 export default function BottomNav({ activeTab, onTabChange }) {
     const tabs = [
         { id: 'muro', label: 'Inicio', icon: Home },
-        { id: 'diagnostico', label: 'Diagnosticar', icon: ClipboardList },
+        { id: 'diagnostico', label: 'Analizar', icon: ClipboardList },
         { id: 'escritos', label: 'Escritos', icon: PenTool },
-        { id: 'copiloto', label: 'Copiloto', icon: MessageSquare },
+        { id: 'copiloto', label: 'IA Chat', icon: MessageSquare },
+        { id: 'all_modules', label: 'Más', icon: Layers },
         { id: 'auth', label: 'Perfil', icon: User }
     ];
 

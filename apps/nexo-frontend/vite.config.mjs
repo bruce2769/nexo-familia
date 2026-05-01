@@ -136,13 +136,16 @@ export default defineConfig({
             },
         },
     },
+    resolve: {
+        alias: {},
+    },
     build: {
         rollupOptions: {
             output: {
                 // Separar vendors en chunk aparte para mejor cache hit rate
                 manualChunks: {
                     'vendor-react':    ['react', 'react-dom'],
-                    'vendor-firebase': ['firebase'],
+                    'vendor-firebase': ['firebase/app', 'firebase/auth', 'firebase/firestore'],
                     'vendor-charts':   ['recharts'],
                     'vendor-motion':   ['framer-motion'],
                     'vendor-ui':       ['lucide-react', 'react-hot-toast'],

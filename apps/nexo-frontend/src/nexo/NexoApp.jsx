@@ -6,6 +6,7 @@ import BottomNav from './components/BottomNav.jsx';
 import DiagnosticoModule from './modules/DiagnosticoModule.jsx';
 import { AuthProvider, useAuth } from '../contexts/AuthContext.jsx';
 import Topbar from './components/Topbar.jsx';
+import { NexoErrorBoundary } from './components/NexoErrorBoundary.jsx';
 
 // ── Lazy Loading on Secondary Modules ──
 const MuroModule = lazy(() => import('./modules/MuroModule.jsx'));
@@ -98,9 +99,11 @@ function NexoAppContent() {
             <div className="nf-content-wrapper">
                 <Topbar onNavigate={navigate} />
                 <main className="nf-main" key={activeTab}>
-                    <Suspense fallback={<LoadingFallback />}>
-                        {renderModule()}
-                    </Suspense>
+                    <NexoErrorBoundary moduleName={activeTab}>
+                        <Suspense fallback={<LoadingFallback />}>
+                            {renderModule()}
+                        </Suspense>
+                    </NexoErrorBoundary>
                 </main>
             </div>
 

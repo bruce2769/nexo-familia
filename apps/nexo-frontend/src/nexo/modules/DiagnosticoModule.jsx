@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { saveToHistorial } from './HistorialModule.jsx';
+import { saveToHistorial } from '../services/historialService.js';
 import { evaluateDiagnosis } from '../engine/evaluateDiagnosis.js';
 import { saveDiagnosis } from '../services/diagnosisHistory.js';
 import { useAuth } from '../../contexts/AuthContext.jsx';

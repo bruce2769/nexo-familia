@@ -50,13 +50,25 @@ export default function CopilotoModule() {
                 token = await auth.currentUser.getIdToken(true);
             }
 
+            // 🧠 HISTORIAL: Construir contexto de conversación para el backend
+            // Excluye el primer mensaje (saludo del copiloto) y los mensajes de error
+            // Convierte al formato {role, content} que espera el backend
+            const historial = messages
+                .filter(m => m.sender === 'user' || m.sender === 'copilot')
+                .slice(1) // Excluir saludo inicial del copiloto
+                .slice(-6) // Máximo últimas 6 turns (3 pares usuario/nexo)
+                .map(m => ({
+                    role: m.sender === 'user' ? 'user' : 'assistant',
+                    content: m.text
+                }));
+
             const res = await fetch(`${BACKEND_URL}/api/v1/copiloto`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ mensaje: text }),
+                body: JSON.stringify({ mensaje: text, historial }),
                 signal: controller.signal
             });
 

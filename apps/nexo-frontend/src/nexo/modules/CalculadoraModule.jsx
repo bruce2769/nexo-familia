@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { saveToHistorial } from './HistorialModule.jsx';
+import { saveToHistorial } from '../services/historialService.js';
 
 // ── Real IPC / UTM Data (Chile, actualizados a 2025-2026) ─────────────────
 // IPC mensual acumulado aproximado (fuente: INE Chile, valores referenciales)

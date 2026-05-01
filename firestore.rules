@@ -1,33 +1,113 @@
 rules_version = '2';
 
+// ─── NEXO FAMILIA — Firestore Security Rules ──────────────────────────────────
+// Principio: mínimo privilegio. El cliente solo lee sus propios datos.
+// Todas las ESCRITURAS van por el backend (FastAPI + Firebase Admin SDK).
+// Actualizado: 2026-04-25
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Reglas para la colección users
+
+    // ── Funciones auxiliares ───────────────────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isBackendWrite() {
+      // El backend usa Admin SDK que bypassea las rules — este bloque
+      // es solo para el cliente web. Admin SDK ignora estas reglas.
+      return false;
+    }
+
+    // ── Usuarios y créditos ────────────────────────────────────────────────────
+    // El cliente puede LEER su propio perfil (créditos, nombre).
+    // Solo el backend puede ESCRIBIR (Admin SDK bypasea las rules).
     match /users/{userId} {
-      // El usuario solo puede leer su propio documento de créditos
-      allow read: if request.auth != null && request.auth.uid == userId;
-      // BLOQUEO TOTAL de escrituras desde el cliente
-      // Solo el backend (FastAPI usnado Admin SDK) puede modificar créditos
-      allow write: if false;
-      
-      // Subcolección de transacciones
-      match /transactions/{transactionId} {
-        allow read: if request.auth != null && request.auth.uid == userId;
+      allow read:  if isOwner(userId);
+      allow write: if false;  // Solo Admin SDK (backend)
+
+      // Transacciones de créditos
+      match /transactions/{txId} {
+        allow read:  if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Conteo de uso de IA por día
+      match /ia_usage/{dayId} {
+        allow read:  if isOwner(userId);
+        allow write: if false;
+      }
+
+      // Historial del scanner por usuario
+      match /scanner_historial/{scanId} {
+        allow read:  if isOwner(userId);
         allow write: if false;
       }
     }
-    
-    // Reglas para el historial de documentos
+
+    // ── Escritos legales generados ─────────────────────────────────────────────
+    // El usuario puede leer solo sus propios escritos.
     match /escritos/{docId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow read: if isAuthenticated()
+                  && request.auth.uid == resource.data.userId;
       allow write: if false;
     }
-    
-    // Causas consultadas (opcional dependiendo si guardas local o en la nube)
+
+    // ── Causas judiciales procesadas ───────────────────────────────────────────
     match /causas/{causaId} {
-      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
-      allow write: if false; // Solo se guardan vía backend
+      allow read: if isAuthenticated()
+                  && request.auth.uid == resource.data.userId;
+      allow write: if false;
+    }
+
+    // ── Caché IA (respuestas cacheadas por hash MD5) ────────────────────────────
+    // Solo lectura para usuarios autenticados (caché compartida).
+    // La escritura solo por el backend.
+    match /cache_ia/{hashId} {
+      allow read:  if isAuthenticated();
+      allow write: if false;
+    }
+
+    // ── Muro comunitario ──────────────────────────────────────────────────────
+    // Cualquier usuario autenticado puede leer el muro.
+    // Las publicaciones solo vienen del backend (anónimas por diseño).
+    match /muro/{postId} {
+      allow read:  if isAuthenticated();
+      allow write: if false;
+
+      // Comentarios del muro
+      match /comments/{commentId} {
+        allow read:  if isAuthenticated();
+        allow write: if false;
+      }
+    }
+
+    // ── Historial de diagnósticos (guardado desde db.js) ──────────────────────
+    match /diagnosticos/{docId} {
+      allow read: if isAuthenticated()
+                  && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated()
+                    && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // ── Radar de causas en vigilancia ──────────────────────────────────────────
+    match /radar_causas/{causaId} {
+      allow read: if isAuthenticated()
+                  && request.auth.uid == resource.data.userId;
+      allow create: if isAuthenticated()
+                    && request.auth.uid == request.resource.data.userId;
+      allow update, delete: if false;
+    }
+
+    // ── Deny all (catch-all) ───────────────────────────────────────────────────
+    // Cualquier colección no listada arriba es bloqueada por defecto.
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }

@@ -1,0 +1,60 @@
+# .github/workflows/health-check.yml
+# ─── Monitor de salud en producción ───────────────────────────────────────────
+# Verifica cada 6 horas que el backend Railway responde correctamente.
+# Si falla, crea un issue automáticamente en GitHub.
+
+name: 🏥 Health Check — Railway Backend
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'   # cada 6 horas
+  workflow_dispatch:          # permite ejecutar manualmente desde GitHub
+
+jobs:
+  health-check:
+    name: Verificar Railway API
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 🔍 Health check /health
+        run: |
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 15 \
+            https://nexo-familia-production-aaf7.up.railway.app/health)
+          
+          echo "HTTP Status: $RESPONSE"
+          
+          if [ "$RESPONSE" != "200" ]; then
+            echo "❌ Backend no responde correctamente (HTTP $RESPONSE)"
+            exit 1
+          fi
+          
+          echo "✅ Backend OK — HTTP $RESPONSE"
+
+      - name: 📡 Verificar respuesta JSON
+        run: |
+          BODY=$(curl -s --max-time 15 \
+            https://nexo-familia-production-aaf7.up.railway.app/health)
+          
+          echo "Respuesta: $BODY"
+          
+          if echo "$BODY" | grep -q '"ok":true'; then
+            echo "✅ JSON válido recibido"
+          else
+            echo "❌ Respuesta inesperada del backend"
+            exit 1
+          fi
+
+      - name: 🚨 Crear issue si falla
+        if: failure()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const now = new Date().toISOString();
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `🚨 [Auto] Backend Railway caído — ${now}`,
+              body: `## ⚠️ Health Check Fallido\n\n**Fecha:** ${now}\n**URL:** https://nexo-familia-production-aaf7.up.railway.app/health\n\n### Acciones recomendadas:\n1. Verificar Railway dashboard\n2. Revisar logs del servicio\n3. Verificar variables de entorno (OPENAI_API_KEY, FIREBASE_SERVICE_ACCOUNT_JSON)\n4. Redeploy si es necesario\n\n*Issue creado automáticamente por GitHub Actions*`,
+              labels: ['bug', 'production', 'auto']
+            });

@@ -1,0 +1,52 @@
+# .github/workflows/deploy-backend.yml
+# ─── CI/CD: Backend Python → Railway ──────────────────────────────────────────
+# Se ejecuta en cada push a main que afecte el backend.
+# Solo verifica que el código es válido (syntax check + import test).
+# El deploy real lo maneja Railway automáticamente via GitHub integration.
+
+name: 🐍 Backend — Lint & Deploy Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/nexo-backend/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/nexo-backend/**'
+
+jobs:
+  lint-and-check:
+    name: Python Syntax & Import Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout código
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'apps/nexo-backend/requirements.txt'
+
+      - name: 📦 Instalar dependencias
+        working-directory: apps/nexo-backend
+        run: pip install -r requirements.txt
+
+      - name: ✅ Verificar sintaxis Python
+        working-directory: apps/nexo-backend
+        run: python -m py_compile main.py core/config.py core/security.py core/credits.py core/database.py core/openai_client.py core/pdf_docx.py
+
+      - name: ✅ Verificar imports de routers
+        working-directory: apps/nexo-backend
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ""
+          OPENAI_API_KEY: "sk-test-dummy"
+          ALLOWED_ORIGINS: "http://localhost:5173"
+        run: python -c "from main import app; print('✅ FastAPI app created successfully')"
+
+      - name: 📊 Resultado
+        run: echo "✅ Backend validado — Railway desplegará automáticamente"

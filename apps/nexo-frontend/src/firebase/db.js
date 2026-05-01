@@ -1,5 +1,6 @@
 // src/firebase/db.js
-export { db } from './config.js'; // Instancia real de Firestore
+import { db } from './config.js';
+export { db } from './config.js'; // re-export para quienes lo usen desde aquí
 import {
     collection,
     addDoc,

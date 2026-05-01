@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { auth } from '../../firebase/config';
 
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
-console.log('🔗 API URL:', BACKEND_URL);
+
 
 export default function ScannerModule() {
     const [text, setText]       = useState('');
@@ -31,11 +31,7 @@ export default function ScannerModule() {
                 formData.append('texto', text);
             }
 
-            console.log("Tipo input:", method);
-            
-            // Simular paso de OCR o texto a logs
-            if (method === 'text') console.log("Texto procesado:", text.substring(0, 100) + "...");
-            else console.log("Texto procesado: [Se procesará en el backend vía OCR o PyMuPDF...]");
+
 
             const headers = {};
             if (auth.currentUser) {
@@ -47,7 +43,7 @@ export default function ScannerModule() {
             const controller = new AbortController();
             const timeoutId = setTimeout(() => controller.abort(), 15000);
 
-            const res = await fetch(`${BACKEND_URL}/causas/procesar`, {
+            const res = await fetch(`${BACKEND_URL}/api/v1/causas/procesar`, {
                 method: 'POST',
                 headers,
                 body: formData,
@@ -63,7 +59,7 @@ export default function ScannerModule() {
 
             const data = await res.json();
             
-            console.log("JSON extraído:", data);
+
             setResult(data);
         } catch (err) {
             console.error("[Scanner] Error:", err);

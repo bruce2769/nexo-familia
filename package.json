@@ -1,0 +1,18 @@
+{
+  "name": "nexo-familia-monorepo",
+  "version": "2.1.0",
+  "private": true,
+  "description": "Nexo Familia — Plataforma Legal SaaS Chile (monorepo)",
+  "scripts": {
+    "dev:frontend":  "cd apps/nexo-frontend && npm run dev",
+    "build:frontend": "cd apps/nexo-frontend && npm run build",
+    "dev:backend":   "cd apps/nexo-backend && uvicorn main:app --host 0.0.0.0 --port 8001 --reload",
+    "health":        "curl -s https://nexo-familia-production-aaf7.up.railway.app/health | python -m json.tool",
+    "deploy:rules":  "firebase deploy --only firestore:rules --project nexo-familia-6fdf6",
+    "migrate:pg":    "cd apps/nexo-backend && python migrar_postgres.py",
+    "format:key":    "cd apps/nexo-backend && python format_firebase_key.py"
+  },
+  "workspaces": [
+    "apps/nexo-frontend"
+  ]
+}

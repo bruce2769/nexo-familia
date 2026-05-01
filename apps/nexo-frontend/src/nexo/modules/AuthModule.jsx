@@ -40,9 +40,7 @@ export default function AuthModule({ onNavigate }) {
                         body: JSON.stringify({ name, email })
                     });
                     if (!res.ok) {
-                        console.warn('Backend init respondió con error:', res.status);
-                    } else {
-                        console.log('✅ Perfil inicializado con 3 créditos.');
+                        console.warn('[Auth] Backend init respondió con error:', res.status);
                     }
                 } catch (backendErr) {
                     // No bloquear el flujo si el backend falla

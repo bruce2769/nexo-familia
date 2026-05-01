@@ -15,11 +15,14 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+.pnpm-debug.log*
+package-lock.json.bak
 
 # ─── Build de Vite / React ────────────────────────────────────────────────────
 dist/
 dist_electron/
 build/
+.vite/
 
 # ─── Python ───────────────────────────────────────────────────────────────────
 __pycache__/
@@ -33,6 +36,8 @@ env/
 *.egg-info/
 *.egg
 .pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
 # ─── Base de datos SQLite (17 MB — demasiado grande para Git) ─────────────────
 *.db
@@ -42,11 +47,14 @@ env/
 # ─── Logs ────────────────────────────────────────────────────────────────────
 logs/
 *.log
+logfile*
 
 # ─── OS ───────────────────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
 desktop.ini
+ehthumbs.db
+Icon?
 
 # ─── IDE ──────────────────────────────────────────────────────────────────────
 .idea/
@@ -56,10 +64,18 @@ desktop.ini
 *.njsproj
 *.sln
 *.sw?
+*.swp
 
-# ─── Electron ─────────────────────────────────────────────────────────────────
+# ─── PDFs de sentencias (datos personales sensibles) ─────────────────────────
+**/pdfs_sentencias/*.pdf
+
+# ─── Archivos temporales y caché ─────────────────────────────────────────────
+*.tmp
+*.temp
+.cache/
+.parcel-cache/
+
+# ─── Electron (legacy) ────────────────────────────────────────────────────────
 dist_electron/
 release/
-
-# ─── PDFs de sentencias (datos sensibles) ────────────────────────────────────
-**/pdfs_sentencias/*.pdf
+out/

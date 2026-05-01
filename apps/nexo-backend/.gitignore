@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+.venv/
+*.egg-info/
+*.egg
+
+# Base de datos (no subir a Git)
+*.db
+*.sqlite
+*.sqlite3
+
+# Variables de entorno
+.env
+
+# Credenciales Firebase (NUNCA)
+serviceAccountKey.json
+serviceAccountKey*.json
+*-firebase-adminsdk-*.json
+firebase_key_railway.txt
+
+# Logs
+*.log
+logs/
+logfile*
+
+# Tests
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Uploads y PDFs sensibles
+pdfs_sentencias/
+uploads/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

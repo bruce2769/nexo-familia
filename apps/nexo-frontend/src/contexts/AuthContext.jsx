@@ -55,7 +55,21 @@ export const AuthProvider = ({ children }) => {
 
     const register = async (email, password, name) => {
         const cred = await createUserWithEmailAndPassword(auth, email, password);
-        // Note: The backend lazy-initializes the profile in 'users' on the first API call.
+        // Inicializar perfil en backend → otorga 3 créditos gratuitos
+        try {
+            const BACKEND = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
+            const token = await cred.user.getIdToken();
+            await fetch(`${BACKEND}/api/v1/users/init`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                },
+                body: JSON.stringify({ name: name || '', email: email || '' }),
+            });
+        } catch (e) {
+            console.warn('[Auth] No se pudo inicializar perfil en backend:', e);
+        }
         return cred;
     };
 

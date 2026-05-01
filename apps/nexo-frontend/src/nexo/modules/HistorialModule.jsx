@@ -1,24 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext.jsx';
+import { readHistorial, clearHistorial, LS_KEY } from '../services/historialService.js';
 
-const LS_KEY = 'nexo-historial';
 const BACKEND_URL = import.meta.env.VITE_NEXO_BACKEND_URL || 'http://localhost:8001';
 
-export function saveToHistorial(entry) {
-    try {
-        const h = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-        h.unshift({ ...entry, id: Date.now(), date: new Date().toLocaleString('es-CL') });
-        if (h.length > 50) h.length = 50;
-        localStorage.setItem(LS_KEY, JSON.stringify(h));
-    } catch { }
-}
 
 const TYPE_META = {
-    scanner: { icon: '🔍', label: 'Escáner', color: 'purple' },
-    financiero: { icon: '💰', label: 'Financiero', color: 'blue' },
-    riesgo: { icon: '🚦', label: 'Riesgo', color: 'green' },
-    escritos: { icon: '📝', label: 'Escritos', color: 'red' },
+    scanner:    { icon: '🔍', label: 'Escáner',     color: 'purple' },
+    financiero: { icon: '💰', label: 'Financiero',  color: 'blue'   },
+    copiloto:   { icon: '🤖', label: 'Copiloto IA', color: 'green'  },
+    escritos:   { icon: '📝', label: 'Escritos',    color: 'red'    },
 };
+
 
 export default function HistorialModule({ onNavigate }) {
     const { currentUser } = useAuth();
@@ -27,11 +20,7 @@ export default function HistorialModule({ onNavigate }) {
     const [expanded, setExpanded] = useState(null);
 
     useEffect(() => {
-        let localH = [];
-        try {
-            localH = JSON.parse(localStorage.getItem(LS_KEY) || '[]');
-        } catch { }
-        
+        const localH = readHistorial();
         setHistorial(localH);
 
         if (currentUser && !currentUser.isAnonymous) {
@@ -84,7 +73,7 @@ export default function HistorialModule({ onNavigate }) {
 
     const clearAll = () => {
         if (confirm('¿Eliminar todo el historial?')) {
-            localStorage.removeItem(LS_KEY);
+            clearHistorial();
             setHistorial([]);
         }
     };
@@ -141,7 +130,7 @@ export default function HistorialModule({ onNavigate }) {
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                         {filtered.map((h, i) => {
-                            const meta = TYPE_META[h.type] || TYPE_META.causa;
+                            const meta = TYPE_META[h.type] || { icon: '📌', label: h.type || 'Consulta', color: 'blue' };
                             return (
                                 <div
                                     className="nf-history-card nf-animate-in"

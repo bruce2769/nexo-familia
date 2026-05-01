@@ -1,0 +1,63 @@
+# .github/workflows/deploy-frontend.yml
+# ─── CI/CD: Frontend React → Vercel ──────────────────────────────────────────
+# Se ejecuta en cada push a main que afecte el frontend.
+# Verifica que el build de producción funciona antes de que Vercel despliegue.
+
+name: ⚛️ Frontend — Build Check
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps/nexo-frontend/**'
+      - '!apps/nexo-frontend/node_modules/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'apps/nexo-frontend/**'
+      - '!apps/nexo-frontend/node_modules/**'
+
+jobs:
+  build-check:
+    name: Vite Production Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: ⬇️ Checkout código
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'apps/nexo-frontend/package-lock.json'
+
+      - name: 📦 Instalar dependencias
+        working-directory: apps/nexo-frontend
+        run: npm ci
+
+      - name: 🏗️ Build de producción
+        working-directory: apps/nexo-frontend
+        env:
+          # Variables mínimas para que Vite no falle en build
+          VITE_FIREBASE_API_KEY: "AIzaSy-placeholder"
+          VITE_FIREBASE_AUTH_DOMAIN: "nexo-familia-6fdf6.firebaseapp.com"
+          VITE_FIREBASE_PROJECT_ID: "nexo-familia-6fdf6"
+          VITE_FIREBASE_STORAGE_BUCKET: "nexo-familia-6fdf6.firebasestorage.app"
+          VITE_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          VITE_FIREBASE_APP_ID: "1:000000000000:web:placeholder"
+          VITE_NEXO_BACKEND_URL: "https://nexo-familia-production-aaf7.up.railway.app/api/v1"
+          VITE_NEXO_NODE_URL: "https://nexo-familia-production.up.railway.app/api"
+        run: npm run build
+
+      - name: 📊 Tamaño del bundle
+        working-directory: apps/nexo-frontend
+        run: |
+          echo "📦 Tamaño del bundle generado:"
+          du -sh dist/
+          echo "📁 Assets principales:"
+          ls -lh dist/assets/*.js 2>/dev/null | head -5 || true
+
+      - name: 📊 Resultado
+        run: echo "✅ Frontend validado — Vercel desplegará automáticamente"
